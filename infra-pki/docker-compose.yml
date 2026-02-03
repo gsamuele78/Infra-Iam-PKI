@@ -6,7 +6,7 @@ services:
     entrypoint: /bin/sh
     environment:
       - CA_PASSWORD=${CA_PASSWORD}
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
     volumes:
       - ./step_data:/home/step
       - ./logs:/opt/logs
@@ -43,6 +43,17 @@ services:
       retries: 3
 
   watchtower:
-    image: containrrr/watchtower
-    volumes: [ "/var/run/docker.sock:/var/run/docker.sock" ]
+    image: containrrr/watchtower:latest-debug
+    user: "${PUID}:${PGID}"
+    environment:
+      - DOCKER_API_VERSION=1.44
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs/watchtower:/var/log/watchtower
     command: --interval 86400 --cleanup --label-enable
+    entrypoint: /bin/sh -c "/watchtower --interval 86400 --cleanup --label-enable 2>&1 | tee -a /var/log/watchtower/system.log"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
