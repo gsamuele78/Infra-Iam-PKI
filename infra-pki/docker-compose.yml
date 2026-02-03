@@ -27,7 +27,7 @@ services:
     volumes:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
-    entrypoint: /bin/sh -c "/bin/sh /entrypoint.sh step-ca 2>&1 | tee -a /var/log/step-ca/system.log"
+    entrypoint: /bin/bash -c "/bin/bash /entrypoint.sh step-ca 2>&1 | tee -a /var/log/step-ca/system.log"
     logging:
       driver: "json-file"
       options:
