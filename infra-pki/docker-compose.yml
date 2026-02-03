@@ -43,7 +43,7 @@ services:
       retries: 3
 
   watchtower:
-    image: containrrr/watchtower:latest-debug
+    image: nickfedor/watchtower:latest
     user: "${PUID}:${PGID}"
     environment:
       - DOCKER_API_VERSION=1.44
