@@ -1,0 +1,25 @@
+services:
+  step-ca:
+    image: smallstep/step-ca:latest
+    container_name: step-ca
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      DOCKER_STEPCA_INIT_NAME: "Internal Root CA"
+      DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA}"
+      DOCKER_STEPCA_INIT_ACME: "true"
+      DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
+    volumes:
+      - ./step_data:/home/step
+    healthcheck:
+      test: [ "CMD", "step", "ca", "health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes: [ "/var/run/docker.sock:/var/run/docker.sock" ]
+    command: --interval 86400 --cleanup --label-enable

@@ -1,0 +1,8 @@
+{
+    acme_ca https://{$IP_CA}:9000/acme/acme/directory
+    acme_ca_root /etc/ssl/certs/root_ca.crt
+}
+
+{$DOMAIN_SSO} {
+    reverse_proxy keycloak:8080
+}
