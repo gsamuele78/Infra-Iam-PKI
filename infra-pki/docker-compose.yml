@@ -6,7 +6,7 @@ services:
     entrypoint: /bin/sh
     environment:
       - CA_PASSWORD=${CA_PASSWORD}
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca && echo \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs"
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
     volumes:
       - ./step_data:/home/step
       - ./logs:/opt/logs
@@ -30,7 +30,7 @@ services:
     volumes:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
-    entrypoint: /bin/bash -c "/bin/bash /entrypoint.sh step-ca 2>&1 | tee -a /var/log/step-ca/system.log"
+    entrypoint: /bin/bash -c "ls -la /home/step/secrets; /bin/bash /entrypoint.sh step-ca --password-file=/home/step/secrets/password 2>&1 | tee -a /var/log/step-ca/system.log"
     logging:
       driver: "json-file"
       options:
