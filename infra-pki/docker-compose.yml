@@ -44,7 +44,6 @@ services:
 
   watchtower:
     image: nickfedor/watchtower:latest
-    user: "${PUID}:${PGID}"
     environment:
       - DOCKER_API_VERSION=1.44
     volumes:
