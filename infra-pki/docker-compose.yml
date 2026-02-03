@@ -51,7 +51,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./logs/watchtower:/var/log/watchtower
     command: --interval 86400 --cleanup --label-enable
-    entrypoint: /bin/sh -c "/watchtower --interval 86400 --cleanup --label-enable 2>&1 | tee -a /var/log/watchtower/system.log"
     logging:
       driver: "json-file"
       options:
