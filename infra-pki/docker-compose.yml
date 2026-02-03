@@ -4,10 +4,12 @@ services:
     container_name: step-ca-setup
     user: root
     entrypoint: /bin/sh
-    command: -c "mkdir -p /home/step /var/log/step-ca && chown -R ${PUID}:${PGID} /home/step /var/log/step-ca"
+    environment:
+      - CA_PASSWORD=${CA_PASSWORD}
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca && echo \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs"
     volumes:
       - ./step_data:/home/step
-      - ./logs/step-ca:/var/log/step-ca
+      - ./logs:/opt/logs
 
   step-ca:
     image: smallstep/step-ca:latest
@@ -24,6 +26,7 @@ services:
       DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA}"
       DOCKER_STEPCA_INIT_ACME: "true"
       DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
+      STEP_CA_PASSWORD_FILE: /home/step/secrets/password
     volumes:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
