@@ -1,9 +1,22 @@
 services:
+  setup:
+    image: smallstep/step-ca:latest
+    container_name: step-ca-setup
+    user: root
+    entrypoint: /bin/sh
+    command: -c "mkdir -p /home/step /var/log/step-ca && chown -R ${PUID}:${PGID} /home/step /var/log/step-ca"
+    volumes:
+      - ./step_data:/home/step
+      - ./logs/step-ca:/var/log/step-ca
+
   step-ca:
     image: smallstep/step-ca:latest
     container_name: step-ca
     user: "${PUID}:${PGID}"
     restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
     ports:
       - "9000:9000"
     environment:
@@ -13,6 +26,13 @@ services:
       DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
     volumes:
       - ./step_data:/home/step
+      - ./logs/step-ca:/var/log/step-ca
+    entrypoint: /bin/sh -c "/entrypoint.sh step-ca 2>&1 | tee -a /var/log/step-ca/system.log"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
     healthcheck:
       test: [ "CMD", "step", "ca", "health" ]
       interval: 30s
