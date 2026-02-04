@@ -44,6 +44,16 @@ services:
       timeout: 10s
       retries: 3
 
+  fingerprint-writer:
+    image: smallstep/step-cli:latest
+    user: "${PUID}:${PGID}"
+    depends_on:
+      step-ca:
+        condition: service_healthy
+    volumes:
+      - ./step_data:/home/step
+    entrypoint: /bin/sh -c "while [ ! -f /home/step/certs/root_ca.crt ]; do sleep 1; done; step certificate fingerprint /home/step/certs/root_ca.crt > /home/step/fingerprint; echo 'Fingerprint written to step_data/fingerprint'; exit 0"
+
   watchtower:
     image: nickfedor/watchtower:latest
     environment:
