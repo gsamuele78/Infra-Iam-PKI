@@ -1,4 +1,41 @@
 services:
+  setup:
+    image: smallstep/step-cli:latest
+    container_name: iam-setup
+    user: root
+    entrypoint: /bin/sh
+    command: -c " apk add --no-cache bash && mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /data/postgres /data/caddy /data/watchtower_logs /certs && /scripts/fetch_root_ca.sh /certs/root_ca.crt && /scripts/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt "
+    volumes:
+      - ./keycloak_data:/data/postgres
+      - ./caddy_data:/data/caddy
+      - ./logs/watchtower:/data/watchtower_logs
+      - ./certs:/certs
+      - ../scripts:/scripts
+      - ./.env:/app/.env
+    env_file:
+      - .env
+
+  renewer:
+    image: smallstep/step-cli:latest
+    container_name: iam-renewer
+    user: root
+    restart: unless-stopped
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    entrypoint: /bin/sh
+    command: -c " apk add --no-cache docker-cli bash && while true; do echo 'Checking certificates...' && /scripts/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key && docker restart iam-keycloak || true; sleep 86400; done "
+    volumes:
+      - ./certs:/certs
+      - ../scripts:/scripts
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
   db:
     image: postgres:15-alpine
     user: "${PUID}:${PGID}"
@@ -14,6 +51,16 @@ services:
       timeout: 5s
       retries: 5
     networks: [ iam-net ]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
@@ -30,7 +77,8 @@ services:
       # Ottimizzazione Java per 16GB RAM (assegniamo 4GB a Keycloak)
       JAVA_OPTS_APPEND: "-Xms2048m -Xmx4096m"
     volumes:
-      - ./ad_root_ca.crt:/etc/x509/ca/ad_root_ca.crt:ro
+      - ./certs/ad_root_ca.crt:/etc/x509/ca/ad_root_ca.crt:ro
+      - ./certs/root_ca.crt:/etc/x509/ca/root_ca.crt:ro
     healthcheck:
       test:
         [
@@ -52,6 +100,13 @@ services:
       db:
         condition: service_healthy
     networks: [ iam-net ]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
 
   caddy:
     image: caddy:latest
@@ -60,13 +115,37 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy_data:/data
-      - ./root_ca.crt:/etc/ssl/certs/root_ca.crt # Copiato da LXC-PKI
+      - ./certs/root_ca.crt:/etc/ssl/certs/root_ca.crt
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:2019/metrics" ]
       interval: 30s
       timeout: 10s
       retries: 3
     networks: [ iam-net ]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
+
+  watchtower:
+    image: nickfedor/watchtower:latest
+    environment:
+      - DOCKER_API_VERSION=1.44
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs/watchtower:/var/log/watchtower
+    command: --interval 86400 --cleanup --label-enable
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "15m"
 
 networks:
   iam-net:
