@@ -102,11 +102,17 @@ Certificates are short-lived (default 24h). Renewals are automated.
 
 ### Maintenance
 
+Run the script without arguments to see the menu:
+
 ```bash
-./scripts/maintenance_docker.sh monitor  # View stats
-./scripts/maintenance_docker.sh prune    # Clean unused images/volumes
-./scripts/maintenance_docker.sh nuke     # ⚠️ DESTROY ALL CONTAINERS & DATA
+./scripts/maintenance_docker.sh
 ```
+
+Or use direct commands:
+
+* `monitor`: View stats.
+* `prune`: Clean unused resources.
+* `nuke`: **Reset System** (Stops all, removes images/volumes/networks/cache).
 
 ---
 
