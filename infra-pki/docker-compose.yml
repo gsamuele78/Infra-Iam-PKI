@@ -17,7 +17,7 @@ services:
       - ./logs:/opt/logs
       - ./db_data:/db_data
     # Create log directories and ensure permissions for PUID:PGID on all data
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower /opt/logs/caddy /opt/logs/postgres && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs /db_data"
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower /opt/logs/caddy /opt/logs/postgres && printf \"%s\" \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs /db_data"
 
   postgres:
     image: postgres:15-alpine
