@@ -45,25 +45,27 @@ echo -e "${GREEN}1. Stopping containers...${NC}"
 echo ""
 echo -e "${GREEN}2. Wiping data directories...${NC}"
 # Check if directories exist
-if [ -d "$PROJECT_DIR/step_data" ]; then
-    echo "   Removing contents of $PROJECT_DIR/step_data..."
-    # We use sudo appropriately if current user doesn't have permission (likely owned by docker root/user)
-    if [ -w "$PROJECT_DIR/step_data" ]; then
-         rm -rf "$PROJECT_DIR/step_data/"*
-    else
-         echo "   (Requesting sudo for file cleanup)"
-         sudo rm -rf "$PROJECT_DIR/step_data/"*
-    fi
-fi
+# Wiping Logic: Remove the directory itself to handle permissions/dotfiles properly
+# Then recreate it.
 
-if [ -d "$PROJECT_DIR/db_data" ]; then
-    echo "   Removing contents of $PROJECT_DIR/db_data..."
-    if [ -w "$PROJECT_DIR/db_data" ]; then
-         rm -rf "$PROJECT_DIR/db_data/"*
-    else
-         sudo rm -rf "$PROJECT_DIR/db_data/"*
-    fi
+echo "   Wiping step_data..."
+if [ -d "$PROJECT_DIR/step_data" ]; then
+    # First try without sudo, fall back to sudo
+    rm -rf "$PROJECT_DIR/step_data" 2>/dev/null || sudo rm -rf "$PROJECT_DIR/step_data"
 fi
+mkdir -p "$PROJECT_DIR/step_data"
+
+echo "   Wiping db_data..."
+if [ -d "$PROJECT_DIR/db_data" ]; then
+    rm -rf "$PROJECT_DIR/db_data" 2>/dev/null || sudo rm -rf "$PROJECT_DIR/db_data"
+fi
+mkdir -p "$PROJECT_DIR/db_data"
+
+echo "   Wiping logs..."
+if [ -d "$PROJECT_DIR/logs" ]; then
+    rm -rf "$PROJECT_DIR/logs" 2>/dev/null || sudo rm -rf "$PROJECT_DIR/logs"
+fi
+mkdir -p "$PROJECT_DIR/logs"
 
 echo ""
 echo -e "${GREEN}>>> RESET COMPLETE <<<${NC}"
