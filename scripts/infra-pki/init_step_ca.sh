@@ -18,6 +18,16 @@ else
     exit 1
 fi
 
+echo "Checking password file..."
+ls -la "$STEP_CA_PASSWORD_FILE"
+if [ -r "$STEP_CA_PASSWORD_FILE" ]; then
+    echo "Password file is readable."
+    # Print length to verify content without exposing password
+    echo "Password length: $(wc -c < "$STEP_CA_PASSWORD_FILE")"
+else
+    echo "ERROR: Password file is NOT readable by user $(id -u)"
+fi
+
 # Helper to add provisioner if missing
 add_provisioner() {
     local name=$1
