@@ -8,58 +8,39 @@ until curl -sk https://step-ca:9000/health | grep -q "ok"; do
 done
 echo "Step-CA is up."
 
+
+echo "Checking file visibility..."
+ls -la /home/step/certs/
+if [ -f "/home/step/certs/root_ca.crt" ]; then
+    echo "Root CA found at /home/step/certs/root_ca.crt"
+else
+    echo "ERROR: Root CA NOT found at /home/step/certs/root_ca.crt"
+    exit 1
+fi
+
 # Helper to add provisioner if missing
 add_provisioner() {
     local name=$1
     local type=$2
     local args=$3
     
-    if step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"$name\""; then
+    # Use step-ca hostname for internal docker networking
+    if step ca provisioner list --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"$name\""; then
         echo "Provisioner '$name' already exists."
     else
         echo "Adding provisioner '$name' ($type)..."
-        step ca provisioner add "$name" --type "$type" $args --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
+        step ca provisioner add "$name" --type "$type" $args --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
     fi
 }
-
-# Helper to read secret from file or env
-read_secret() {
-    local env_var_name=$1
-    local file_var_name=$2
-    local val=${!env_var_name}
-    local file_val=${!file_var_name}
-    
-    if [ -n "$file_val" ] && [ -f "$file_val" ]; then
-        cat "$file_val"
-    else
-        echo "$val"
-    fi
-}
-
-OIDC_CLIENT_SECRET=$(read_secret OIDC_CLIENT_SECRET OIDC_CLIENT_SECRET_FILE)
-SSH_HOST_PROVISIONER_PASSWORD=$(read_secret SSH_HOST_PROVISIONER_PASSWORD SSH_HOST_PROVISIONER_PASSWORD_FILE)
-
-# 1. OIDC Provisioner (For SSH User Certs via SSO)
-if [ -n "$OIDC_CLIENT_ID" ] && [ -n "$OIDC_CLIENT_SECRET" ]; then
-    echo "Configuring OIDC..."
-    # OIDC provisioners naturally support SSH user certs if the functionality is enabled in the client.
-    # No special flag needed on the CA side except standard OIDC config.
-    add_provisioner "$OIDC_NAME" "OIDC" "--client-id=$OIDC_CLIENT_ID --client-secret=$OIDC_CLIENT_SECRET --configuration-endpoint=$OIDC_ENDPOINT --domain=$OIDC_DOMAIN"
-fi
-
-# 2. SSH Host Support
-# Best Practice: 
-# - Use a JWK provisioner (or OIDC) to sign INITIAL certificates (step ca certificate --provisioner ...).
-# - Use 'ssh-pop' provisioner to RENEW certificates (step ca renew ...).
-
+# ...
 if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     echo "Configuring SSH Host Provisioners..."
     
     # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
-    if ! step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"type\": \"SSHPOP\""; then
+    if ! step ca provisioner list --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt | grep -q "\"type\": \"SSHPOP\""; then
          echo "Adding SSH-POP provisioner (for host renewal)..."
          # This uses the CA's existing SSH host key to verify renewal requests signed by current valid certs.
-         step ca provisioner add "ssh-pop" --type "SSHPOP" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
+         step ca provisioner add "ssh-pop" --type "SSHPOP" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
     else
          echo "SSH-POP provisioner already exists."
     fi
@@ -68,16 +49,17 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     # While the default provisioner often works, dedicated one is cleaner for host automation.
     if [ -n "$SSH_HOST_PROVISIONER_PASSWORD" ]; then
          echo "Adding dedicated JWK provisioner for SSH Initial Enrollment..."
-         if ! step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"ssh-host-jwk\""; then
+         if ! step ca provisioner list --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"ssh-host-jwk\""; then
              # Create a password-protected JWK provisioner specifically for bootstrapping hosts
              echo "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
-             step ca provisioner add "ssh-host-jwk" --type "JWK" --password-file-from-stdin < /tmp/host_jwk_pass --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
+             step ca provisioner add "ssh-host-jwk" --type "JWK" --password-file-from-stdin < /tmp/host_jwk_pass --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
              rm /tmp/host_jwk_pass
          else
              echo "JWK provisioner 'ssh-host-jwk' already exists."
          fi
     fi
 fi
+
 
 # 3. ACME Provisioner
 if [ "$ENABLE_ACME" = "true" ]; then

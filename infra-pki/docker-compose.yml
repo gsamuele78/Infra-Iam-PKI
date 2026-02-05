@@ -105,6 +105,7 @@ services:
       - ENABLE_K8S_PROVISIONER=${ENABLE_K8S_PROVISIONER}
     volumes:
       - ../scripts/infra-pki:/scripts
+      - ./step_data:/home/step
     command: -c "/scripts/init_step_ca.sh"
 
   caddy:
