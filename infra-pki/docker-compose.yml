@@ -2,7 +2,7 @@ services:
   # 1. Pre-Start Init: Creates directories and secrets
   # Must run BEFORE step-ca starts.
   init-files:
-    image: smallstep/step-ca:latest
+    image: smallstep/step-ca:0.29.0
     container_name: step-ca-init-files
     user: root
     entrypoint: /bin/sh
@@ -48,8 +48,9 @@ services:
 
   # 2. Main Service
   step-ca:
-    image: smallstep/step-ca:latest
+    image: smallstep/step-ca:0.29.0
     container_name: step-ca
+    hostname: step-ca
     user: "${PUID}:${PGID}"
     restart: unless-stopped
     labels:
@@ -91,7 +92,7 @@ services:
   # 3. Post-Start Config: Configures provisioners dynamically
   # Must run AFTER step-ca is healthy.
   configurator:
-    image: smallstep/step-ca:latest
+    image: smallstep/step-cli:0.29.0
     container_name: step-ca-configurator
     user: "${PUID}:${PGID}"
     entrypoint: /bin/sh
@@ -122,6 +123,7 @@ services:
   caddy:
     build:
       context: ./caddy
+    image: infra-pki-caddy:latest # Local build, keeping latest for local
     container_name: step-ca-proxy
     restart: unless-stopped
     ports:
@@ -135,9 +137,14 @@ services:
       step-ca:
         condition: service_healthy
     logging: *default-logging
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   fingerprint-writer:
-    image: smallstep/step-cli:latest
+    image: smallstep/step-cli:0.29.0
     user: "${PUID}:${PGID}"
     depends_on:
       step-ca:

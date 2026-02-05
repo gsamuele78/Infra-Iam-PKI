@@ -68,8 +68,31 @@ install_dependencies() {
         elif [[ "$ARCH" == "aarch64" ]]; then ARCH="arm64"; fi
         
         VERSION=$(curl -s https://api.github.com/repos/smallstep/cli/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//')
-        wget -q "https://github.com/smallstep/cli/releases/download/v${VERSION}/step_linux_${VERSION}_${ARCH}.tar.gz" -O /tmp/step.tar.gz
-        tar -xf /tmp/step.tar.gz -C /tmp
+        
+        # Define URLs
+        ARTIFACT="step_linux_${VERSION}_${ARCH}.tar.gz"
+        DOWNLOAD_URL="https://github.com/smallstep/cli/releases/download/v${VERSION}/${ARTIFACT}"
+        CHECKSUM_URL="https://github.com/smallstep/cli/releases/download/v${VERSION}/checksums.txt"
+        
+        echo "Downloading $ARTIFACT (v$VERSION)..."
+        wget -q "$DOWNLOAD_URL" -O "/tmp/$ARTIFACT"
+        wget -q "$CHECKSUM_URL" -O "/tmp/checksums.txt"
+        
+        # Verify Checksum
+        echo "Verifying checksum..."
+        EXPECTED_SUM=$(grep "$ARTIFACT" /tmp/checksums.txt | cut -d ' ' -f 1)
+        ACTUAL_SUM=$(sha256sum "/tmp/$ARTIFACT" | cut -d ' ' -f 1)
+        
+        if [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
+            echo -e "${RED}ERROR: Checksum verification failed!${NC}"
+            echo "Expected: $EXPECTED_SUM"
+            echo "Actual:   $ACTUAL_SUM"
+            rm -f "/tmp/$ARTIFACT" "/tmp/checksums.txt"
+            exit 1
+        fi
+        echo -e "${GREEN}Checksum verified.${NC}"
+        
+        tar -xf "/tmp/$ARTIFACT" -C /tmp
         mv /tmp/step_${VERSION}/bin/step /usr/local/bin/
         chmod +x /usr/local/bin/step
         rm -rf /tmp/step*

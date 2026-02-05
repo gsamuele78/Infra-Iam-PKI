@@ -89,13 +89,22 @@ echo "Generating token for '$HOSTNAME'..."
 # BUT: 'step ca token' needs admin access or a provisioner password.
 
 # Docker approach:
-# We pass the provisioner password via stdin to avoiding leaking in ps
+# Create a temporary file for the password to ensure security
+PW_FILE=$(mktemp)
+chmod 600 "$PW_FILE"
+echo -n "$SSH_PASSWORD" > "$PW_FILE"
+
+# Pass the password file via stdin using redirection from the file
+# This is safer than pipes or here-strings in some environments
 TOKEN=$(docker exec -i step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
     --key /home/step/secrets/ssh_host_jwk_key \
     --password-file /dev/stdin \
     --host \
-    <<< "$SSH_PASSWORD")
+    < "$PW_FILE")
+
+# Cleanup
+rm -f "$PW_FILE"
 
 # 4. Output
 echo -e "${GREEN}>>> Token Generated Successfully <<<${NC}"
