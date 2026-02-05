@@ -14,11 +14,11 @@ add_provisioner() {
     local type=$2
     local args=$3
     
-    if step ca provisioner list | grep -q "\"name\": \"$name\""; then
+    if step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"$name\""; then
         echo "Provisioner '$name' already exists."
     else
         echo "Adding provisioner '$name' ($type)..."
-        step ca provisioner add "$name" --type "$type" $args --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE"
+        step ca provisioner add "$name" --type "$type" $args --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
     fi
 }
 
@@ -56,10 +56,10 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     echo "Configuring SSH Host Provisioners..."
     
     # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
-    if ! step ca provisioner list | grep -q "\"type\": \"SSH\""; then
+    if ! step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"type\": \"SSHPOP\""; then
          echo "Adding SSH-POP provisioner (for host renewal)..."
          # This uses the CA's existing SSH host key to verify renewal requests signed by current valid certs.
-         step ca provisioner add "ssh-pop" --type "ssh" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE"
+         step ca provisioner add "ssh-pop" --type "SSHPOP" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
     else
          echo "SSH-POP provisioner already exists."
     fi
@@ -68,10 +68,10 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     # While the default provisioner often works, dedicated one is cleaner for host automation.
     if [ -n "$SSH_HOST_PROVISIONER_PASSWORD" ]; then
          echo "Adding dedicated JWK provisioner for SSH Initial Enrollment..."
-         if ! step ca provisioner list | grep -q "\"name\": \"ssh-host-jwk\""; then
+         if ! step ca provisioner list --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"ssh-host-jwk\""; then
              # Create a password-protected JWK provisioner specifically for bootstrapping hosts
              echo "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
-             step ca provisioner add "ssh-host-jwk" --type "JWK" --password-file-from-stdin < /tmp/host_jwk_pass --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE"
+             step ca provisioner add "ssh-host-jwk" --type "JWK" --password-file-from-stdin < /tmp/host_jwk_pass --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://localhost:9000" --root /home/step/certs/root_ca.crt
              rm /tmp/host_jwk_pass
          else
              echo "JWK provisioner 'ssh-host-jwk' already exists."
