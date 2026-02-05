@@ -41,34 +41,42 @@ if [ "$MODE" == "monitor" ]; then
 fi
 
 if [ "$MODE" == "nuke" ]; then
-    echo "☢️  NUCLEAR OPTION INITIATED ☢️"
-    echo "This will:"
-    echo "  1. STOP ALL containers"
-    echo "  2. REMOVE ALL containers, images, volumes, networks"
-    echo "  3. CLEAR build cache"
-    echo "  NOTE: This does NOT delete bind-mounted data directories on the host filesystem."
-    echo "  This operation is IRREVERSIBLE."
-    
-    read -rp "Are you absolutely sure? (Type 'NUKE' to confirm): " confirmation
-    if [ "$confirmation" != "NUKE" ]; then
-        echo "Aborted."
-        exit 1
+    echo "This option allows you to reset specific project data."
+    echo "1) Reset Infra-PKI (Wipe step_data and db_data)"
+    echo "2) System Prune (Docker system prune -a --volumes)"
+    read -rp "Select option: " subchoice
+
+    if [ "$subchoice" == "1" ]; then
+        echo "⚠️  WARNING: This will delete ALL certificates and CA configuration for Infra-PKI! ⚠️"
+        read -rp "Are you sure? (type 'yes' to confirm): " confirm
+        if [ "$confirm" == "yes" ]; then
+            PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../infra-pki" && pwd)"
+            if [ -d "$PROJECT_DIR" ]; then
+                echo "Stopping containers in $PROJECT_DIR..."
+                (cd "$PROJECT_DIR" && docker compose down -v)
+                
+                echo "Removing persistent data..."
+                # Use sudo if necessary, or check permissions
+                sudo rm -rf "$PROJECT_DIR/step_data/"* "$PROJECT_DIR/db_data/"* || echo "Failed to remove data. Try running script with sudo."
+                
+                echo "Reset complete. You can now rebuild with: docker compose up --build"
+            else
+                echo "Error: Could not find infra-pki directory at $PROJECT_DIR"
+                exit 1
+            fi
+        else
+            echo "Aborted."
+        fi
+        exit 0
+    elif [ "$subchoice" == "2" ]; then
+        echo "☢️  SYSTEM NUKE INITIATED ☢️"
+        # ... existing nuke logic ...
+        echo "Stopping all containers..."
+        docker stop $(docker ps -aq) 2>/dev/null || true
+        echo "Pruning entire system..."
+        docker system prune -a --volumes --force
+        exit 0
     fi
-    
-    echo "Stopping all containers..."
-    docker stop $(docker ps -aq) 2>/dev/null || true
-    
-    echo "Removing all containers..."
-    docker rm $(docker ps -aq) 2>/dev/null || true
-    
-    echo "Pruning entire system (volumes + images)..."
-    docker system prune -a --volumes --force
-    
-    echo "Cleaning build cache..."
-    docker builder prune --all --force
-    
-    echo "System is clean."
-    exit 0
 fi
 
 if [ "$MODE" == "prune" ]; then

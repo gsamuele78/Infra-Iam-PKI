@@ -56,7 +56,8 @@ services:
       DOCKER_STEPCA_INIT_REDIS: "false"
       DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "true"
       DOCKER_STEPCA_INIT_SSH: "true"
-      DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
+      # FORCE configured password during initialization
+      DOCKER_STEPCA_INIT_PASSWORD_FILE: /home/step/secrets/password
       STEP_CA_PASSWORD_FILE: /home/step/secrets/password
       # PostgreSQL Connection
       PGHOST: postgres
