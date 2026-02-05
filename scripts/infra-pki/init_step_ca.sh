@@ -54,7 +54,8 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
              echo "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
              # Note: For JWK provisioner, the password for the NEW key is read from STDIN.
              # The --password-file flag provides the ADMIN password for authentication.
-             cat /tmp/host_jwk_pass | step ca provisioner add "ssh-host-jwk" --type "JWK" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
+             # We must explicitly add --create to generate the new key pair.
+             cat /tmp/host_jwk_pass | step ca provisioner add "ssh-host-jwk" --create --type "JWK" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
              rm /tmp/host_jwk_pass
          else
              echo "JWK provisioner 'ssh-host-jwk' already exists."
