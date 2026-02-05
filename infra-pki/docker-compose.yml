@@ -6,6 +6,8 @@ services:
     container_name: step-ca-init-files
     user: root
     entrypoint: /bin/sh
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       - CA_PASSWORD=${CA_PASSWORD}
       - PUID=${PUID}
@@ -19,6 +21,8 @@ services:
     image: postgres:15-alpine
     container_name: step-ca-db
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -85,6 +89,8 @@ services:
     depends_on:
       step-ca:
         condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       - STEP_CA_PASSWORD_FILE=/home/step/secrets/password
       # Provisioner Configs
@@ -97,6 +103,7 @@ services:
       - ENABLE_SSH_PROVISIONER=${ENABLE_SSH_PROVISIONER}
       - SSH_HOST_PROVISIONER_PASSWORD=${SSH_HOST_PROVISIONER_PASSWORD}
       - ENABLE_K8S_PROVISIONER=${ENABLE_K8S_PROVISIONER}
+    volumes:
       - ../scripts/infra-pki:/scripts
     command: -c "/scripts/init_step_ca.sh"
 
@@ -121,6 +128,8 @@ services:
     depends_on:
       step-ca:
         condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     volumes:
       - ./step_data:/home/step
     entrypoint: /bin/sh -c "while [ ! -f /home/step/certs/root_ca.crt ]; do sleep 1; done; step certificate fingerprint /home/step/certs/root_ca.crt > /home/step/fingerprint; echo 'Fingerprint written to step_data/fingerprint'; exit 0"

@@ -6,10 +6,11 @@
 layer4 {
     # Port 9000: Main Step-CA Interface
     :9000 {
-        @allowed {
-            ip {$ALLOWED_IPS}
-        }
-        route @allowed {
+        # @allowed {
+        #     ip {$ALLOWED_IPS}
+        # }
+        # route @allowed {
+        route {
             # Proxying TCP traffic. 
             # Production recommendation: Ensure 'proxy_protocol' is NOT enabled unless step-ca expects it.
             # Step-CA supports HAProxy PROXY protocol v1/v2 if configured, but default does not.
