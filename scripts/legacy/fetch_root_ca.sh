@@ -8,8 +8,8 @@ OUTPUT_FILE=${1:-root_ca.crt}
 WORKDIR=$(pwd)
 
 # Load configuration
-if [ -f "$WORKDIR/../infra-pki/.env" ]; then
-    source "$WORKDIR/../infra-pki/.env"
+if [ -f "$WORKDIR/../../infra-pki/.env" ]; then
+    source "$WORKDIR/../../infra-pki/.env"
 elif [ -f "$WORKDIR/.env" ]; then
     source "$WORKDIR/.env"
 fi
@@ -18,8 +18,8 @@ CA_URL="${CA_URL:-https://localhost:9000}"
 FINGERPRINT="${FINGERPRINT:-}"
 
 # Check for fingerprint file in infra-pki if not in env
-if [ -z "$FINGERPRINT" ] && [ -f "$WORKDIR/../infra-pki/step_data/fingerprint" ]; then
-    FINGERPRINT=$(cat "$WORKDIR/../infra-pki/step_data/fingerprint")
+if [ -z "$FINGERPRINT" ] && [ -f "$WORKDIR/../../infra-pki/step_data/fingerprint" ]; then
+    FINGERPRINT=$(cat "$WORKDIR/../../infra-pki/step_data/fingerprint")
     echo "Found fingerprint in infra-pki/step_data: $FINGERPRINT"
 fi
 

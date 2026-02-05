@@ -1,22 +1,24 @@
 services:
-  setup:
+  # 1. Pre-Start Init: Creates directories and secrets
+  # Must run BEFORE step-ca starts.
+  init-files:
     image: smallstep/step-ca:latest
-    container_name: step-ca-setup
+    container_name: step-ca-init-files
     user: root
     entrypoint: /bin/sh
     environment:
       - CA_PASSWORD=${CA_PASSWORD}
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
+      - PUID=${PUID}
+      - PGID=${PGID}
     volumes:
       - ./step_data:/home/step
       - ./logs:/opt/logs
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
 
   postgres:
     image: postgres:15-alpine
     container_name: step-ca-db
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -29,6 +31,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # 2. Main Service
   step-ca:
     image: smallstep/step-ca:latest
     container_name: step-ca
@@ -37,16 +40,18 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
-      setup:
+      init-files:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
-    ports:
-      - "9000:9000"
+    # Ports removed - accessed via Caddy usage
     environment:
       DOCKER_STEPCA_INIT_NAME: "Internal Root CA"
-      DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA}"
+      DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA},step-ca"
       DOCKER_STEPCA_INIT_ACME: "true"
+      DOCKER_STEPCA_INIT_REDIS: "false"
+      DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "true"
+      DOCKER_STEPCA_INIT_SSH: "true"
       DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
       STEP_CA_PASSWORD_FILE: /home/step/secrets/password
       # PostgreSQL Connection
@@ -69,6 +74,46 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # 3. Post-Start Config: Configures provisioners dynamically
+  # Must run AFTER step-ca is healthy.
+  configurator:
+    image: smallstep/step-ca:latest
+    container_name: step-ca-configurator
+    user: root
+    entrypoint: /bin/sh
+    depends_on:
+      step-ca:
+        condition: service_healthy
+    environment:
+      - STEP_CA_PASSWORD_FILE=/home/step/secrets/password
+      # Provisioner Configs
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+      - OIDC_NAME=${OIDC_NAME}
+      - OIDC_ENDPOINT=${OIDC_ENDPOINT}
+      - OIDC_DOMAIN=${OIDC_DOMAIN}
+      - ENABLE_ACME=${ENABLE_ACME}
+      - ENABLE_SSH_PROVISIONER=${ENABLE_SSH_PROVISIONER}
+      - SSH_HOST_PROVISIONER_PASSWORD=${SSH_HOST_PROVISIONER_PASSWORD}
+      - ENABLE_K8S_PROVISIONER=${ENABLE_K8S_PROVISIONER}
+      - ../scripts/infra-pki:/scripts
+    command: -c "/scripts/init_step_ca.sh"
+
+  caddy:
+    build:
+      context: ./caddy
+    container_name: step-ca-proxy
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - ALLOWED_IPS=${ALLOWED_IPS}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      step-ca:
+        condition: service_healthy
 
   fingerprint-writer:
     image: smallstep/step-cli:latest

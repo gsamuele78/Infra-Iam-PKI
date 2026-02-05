@@ -1,0 +1,23 @@
+{
+    admin off
+    # auto_https off # Managed by step-ca, Caddy just forwards TCP
+}
+
+layer4 {
+    # Port 9000: Main Step-CA Interface
+    :9000 {
+        @allowed {
+            ip {$ALLOWED_IPS}
+        }
+        route @allowed {
+            # Proxying TCP traffic. 
+            # Production recommendation: Ensure 'proxy_protocol' is NOT enabled unless step-ca expects it.
+            # Step-CA supports HAProxy PROXY protocol v1/v2 if configured, but default does not.
+            # We just stream TCP.
+            proxy step-ca:9000 {
+                # Timeouts can be adjusted if long-lived connections (like watch requests) drop
+                # dial_timeout 5s
+            }
+        }
+    }
+}
