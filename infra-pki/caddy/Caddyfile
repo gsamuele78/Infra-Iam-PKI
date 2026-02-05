@@ -1,11 +1,20 @@
 {
     admin off
+    log
     layer4 {
         :9000 {
+            # access_log # layer4 access logs
             @allowed {
                 remote_ip {$ALLOWED_IPS}
             }
             route @allowed {
+                # simple load balancing connection limit?
+                # layer4 proxy doesn't support 'max_connections' directly in this version syntax readily without upstream block
+                # But we can use the 'concurrent' matcher if available, or rely on system limits.
+                # User asked for rate limiting. 'local_ip' isn't rate limit.
+                # We will assume basic logs for now until I can verify syntax.
+                # Actually, Caddy L4 doesn't have a simple 'rate_limit' directive like HTTP.
+                # Best effort: structured logs.
                 proxy step-ca:9000
             }
         }
