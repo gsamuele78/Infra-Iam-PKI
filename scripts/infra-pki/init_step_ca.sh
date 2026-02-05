@@ -52,7 +52,9 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
          if ! step ca provisioner list --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"ssh-host-jwk\""; then
              # Create a password-protected JWK provisioner specifically for bootstrapping hosts
              echo "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
-             step ca provisioner add "ssh-host-jwk" --type "JWK" --password-file-from-stdin < /tmp/host_jwk_pass --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
+             # Note: For JWK provisioner, the password for the NEW key is read from STDIN.
+             # The --password-file flag provides the ADMIN password for authentication.
+             cat /tmp/host_jwk_pass | step ca provisioner add "ssh-host-jwk" --type "JWK" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
              rm /tmp/host_jwk_pass
          else
              echo "JWK provisioner 'ssh-host-jwk' already exists."
