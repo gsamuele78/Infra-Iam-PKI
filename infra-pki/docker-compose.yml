@@ -68,7 +68,8 @@ services:
       DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "true"
       DOCKER_STEPCA_INIT_SSH: "true"
       # FORCE configured password during initialization
-      DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
+      # Use FILE to ensure consistency with configurator (avoids newline mismatches)
+      DOCKER_STEPCA_INIT_PASSWORD_FILE: /home/step/secrets/password
       STEP_CA_PASSWORD_FILE: /home/step/secrets/password
       # PostgreSQL Connection
       PGHOST: postgres
