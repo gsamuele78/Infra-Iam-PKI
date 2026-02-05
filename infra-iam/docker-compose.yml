@@ -4,7 +4,7 @@ services:
     container_name: iam-setup
     user: root
     entrypoint: /bin/sh
-    command: -c " apk add --no-cache bash && mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /data/postgres /data/caddy /data/watchtower_logs /certs && /scripts/fetch_root_ca.sh /certs/root_ca.crt && /scripts/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt "
+    command: -c " apk add --no-cache bash openssl && mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /data/postgres /data/caddy /data/watchtower_logs /certs && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt && /scripts/infra-iam/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt "
     volumes:
       - ./keycloak_data:/data/postgres
       - ./caddy_data:/data/caddy
