@@ -11,6 +11,22 @@ services:
       - ./step_data:/home/step
       - ./logs:/opt/logs
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: step-ca-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   step-ca:
     image: smallstep/step-ca:latest
     container_name: step-ca
@@ -21,6 +37,8 @@ services:
     depends_on:
       setup:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     ports:
       - "9000:9000"
     environment:
@@ -29,6 +47,12 @@ services:
       DOCKER_STEPCA_INIT_ACME: "true"
       DOCKER_STEPCA_INIT_PASSWORD: ${CA_PASSWORD}
       STEP_CA_PASSWORD_FILE: /home/step/secrets/password
+      # PostgreSQL Connection
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
     volumes:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca

@@ -160,6 +160,22 @@ To configure a new server (e.g., a web server, database, or Kubernetes node) to 
 * **Cause:** Docker Compose file using old protocol.
 * **Fix:** Ensure `DOCKER_API_VERSION=1.44` is set in Watchtower environment (already applied in `docker-compose.yml`).
 
+### Re-initializing PKI (Changing Domain/Passwords)
+
+* **Problem:** Changing `DOMAIN_CA` or passwords in `.env` has no effect.
+* **Cause:** `step-ca` only initializes once. Subsequent runs use the persisted configuration in the `step_data` volume.
+* **Fix:** You must manually delete the data to force a rebuild.
+
+    ```bash
+    cd infra-pki
+    docker compose down
+    sudo rm -rf step_data/   # ⚠️ WARNING: Deletes all existing keys/certs!
+    sudo rm -rf logs/
+    docker compose up -d
+    ```
+
+    *Note: After this, the Root CA Fingerprint will change. Update `infra-iam/.env` and re-issue all service certificates.*
+
 ---
 
 ## 7. Best Practices & Security
