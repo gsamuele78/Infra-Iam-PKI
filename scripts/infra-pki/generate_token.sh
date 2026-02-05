@@ -92,6 +92,7 @@ echo "Generating token for '$HOSTNAME'..."
 # We pass the provisioner password via stdin to avoiding leaking in ps
 TOKEN=$(docker exec -i step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
+    --key /home/step/secrets/ssh_host_jwk_key \
     --password-file /dev/stdin \
     --host \
     <<< "$SSH_PASSWORD")

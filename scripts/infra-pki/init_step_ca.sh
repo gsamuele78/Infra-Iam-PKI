@@ -52,10 +52,23 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
          if ! step ca provisioner list --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt | grep -q "\"name\": \"ssh-host-jwk\""; then
              # Create a password-protected JWK provisioner specifically for bootstrapping hosts
              echo "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
-             # Note: For JWK provisioner, the password for the NEW key is read from STDIN.
-             # The --password-file flag provides the ADMIN password for authentication.
-             # We must explicitly add --create to generate the new key pair.
-             cat /tmp/host_jwk_pass | step ca provisioner add "ssh-host-jwk" --create --type "JWK" --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
+             
+             # 1. Generate Keypair explicitly so we can persist the private key
+             if [ ! -f "/home/step/secrets/ssh_host_jwk_key" ]; then
+                echo "Generating JWK Keypair..."
+                step crypto jwk create /home/step/certs/ssh_host_jwk.pub /home/step/secrets/ssh_host_jwk_key \
+                    --password-file /tmp/host_jwk_pass \
+                    --force
+             fi
+
+             # 2. Add Provisioner using the Public Key
+             # --create=false is implied when providing keys, but we can be explicit if needed.
+             # We use --public-key to link it.
+             echo "Adding 'ssh-host-jwk' provisioner..."
+             step ca provisioner add "ssh-host-jwk" --type "JWK" --public-key /home/step/certs/ssh_host_jwk.pub \
+                 --admin-subject="step" --password-file="$STEP_CA_PASSWORD_FILE" \
+                 --ca-url "https://step-ca:9000" --root /home/step/certs/root_ca.crt
+                 
              rm /tmp/host_jwk_pass
          else
              echo "JWK provisioner 'ssh-host-jwk' already exists."
