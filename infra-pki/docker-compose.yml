@@ -95,6 +95,7 @@ services:
     container_name: step-ca-configurator
     user: "${PUID}:${PGID}"
     entrypoint: /bin/sh
+    restart: on-failure:5
     depends_on:
       step-ca:
         condition: service_healthy
