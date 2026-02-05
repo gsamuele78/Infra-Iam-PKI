@@ -15,12 +15,15 @@ services:
     volumes:
       - ./step_data:/home/step
       - ./logs:/opt/logs
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step && chown -R ${PUID}:${PGID} /opt/logs"
+      - ./db_data:/db_data
+    # Create log directories and ensure permissions for PUID:PGID on all data
+    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower /opt/logs/caddy /opt/logs/postgres && echo -n \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs /db_data"
 
   postgres:
     image: postgres:15-alpine
     container_name: step-ca-db
     restart: unless-stopped
+    user: "${PUID}:${PGID}"
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     environment:
@@ -29,11 +32,19 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./db_data:/var/lib/postgresql/data
+      - ./logs/postgres:/var/log/postgresql
+    # Enable file logging in addition to Docker logs
+    command: postgres -c logging_collector=on -c log_destination=stderr,csvlog -c log_directory=/var/log/postgresql -c log_filename=postgresql.log
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: &default-logging
+      driver: "json-file"
+      options:
+        max-file: "5"
+        max-size: "10m"
 
   # 2. Main Service
   step-ca:
@@ -69,11 +80,7 @@ services:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
     entrypoint: /bin/bash -c "ls -la /home/step/secrets; /bin/bash /entrypoint.sh step-ca --password-file=/home/step/secrets/password 2>&1 | tee -a /var/log/step-ca/system.log"
-    logging:
-      driver: "json-file"
-      options:
-        max-file: "5"
-        max-size: "15m"
+    logging: *default-logging
     healthcheck:
       test: [ "CMD", "step", "ca", "health" ]
       interval: 30s
@@ -85,7 +92,7 @@ services:
   configurator:
     image: smallstep/step-ca:latest
     container_name: step-ca-configurator
-    user: root
+    user: "${PUID}:${PGID}"
     entrypoint: /bin/sh
     depends_on:
       step-ca:
@@ -108,6 +115,7 @@ services:
       - ../scripts/infra-pki:/scripts
       - ./step_data:/home/step
     command: -c "/scripts/init_step_ca.sh"
+    logging: *default-logging
 
   caddy:
     build:
@@ -120,9 +128,11 @@ services:
       - ALLOWED_IPS=${ALLOWED_IPS}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./logs/caddy:/var/log/caddy
     depends_on:
       step-ca:
         condition: service_healthy
+    logging: *default-logging
 
   fingerprint-writer:
     image: smallstep/step-cli:latest
@@ -135,6 +145,7 @@ services:
     volumes:
       - ./step_data:/home/step
     entrypoint: /bin/sh -c "while [ ! -f /home/step/certs/root_ca.crt ]; do sleep 1; done; step certificate fingerprint /home/step/certs/root_ca.crt > /home/step/fingerprint; echo 'Fingerprint written to step_data/fingerprint'; exit 0"
+    logging: *default-logging
 
   watchtower:
     image: nickfedor/watchtower:latest
@@ -142,6 +153,7 @@ services:
       - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
       - ./logs/watchtower:/var/log/watchtower
     command: --interval 86400 --cleanup --label-enable
     logging:
