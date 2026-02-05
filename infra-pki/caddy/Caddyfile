@@ -2,7 +2,10 @@
     admin off
     layer4 {
         :9000 {
-            route {
+            @allowed {
+                remote_ip {$ALLOWED_IPS}
+            }
+            route @allowed {
                 proxy step-ca:9000
             }
         }
