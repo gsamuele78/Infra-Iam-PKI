@@ -12,7 +12,10 @@ fi
 
 CRT_FILE=$(realpath "$1")
 KEY_FILE=$(realpath "$2")
-CA_URL="https://ca.biome.unibo.it:9000"
+CRT_FILE=$(realpath "$1")
+KEY_FILE=$(realpath "$2")
+# Default to internal generic name, or read from env
+CA_URL="${CA_URL:-https://step-ca:9000}"
 
 # Check if file exists
 if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE" ]; then

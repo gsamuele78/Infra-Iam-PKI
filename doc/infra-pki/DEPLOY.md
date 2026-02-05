@@ -46,7 +46,7 @@ If initializing for the first time or after a reset:
     The `setup` container will run `init_step_ca.sh`. Monitor logs to ensure success:
 
     ```bash
-    docker compose logs -f setup
+    docker compose logs -f step-ca-configurator
     ```
 
 ## 4. Host Trust
