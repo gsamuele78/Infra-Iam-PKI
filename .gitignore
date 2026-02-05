@@ -1,0 +1,30 @@
+# .gitignore for Infra-PKI
+
+# Environment Variables (Secrets)
+.env
+*.env
+!.env.example
+
+# Data Directories
+step_data/
+db_data/
+logs/
+keycloak_data/
+caddy_data/
+certs/
+
+# Secrets
+secrets/
+*.key
+*.crt
+*.pem
+*.p12
+
+# Generated Scripts/Tokens
+*_join_pki.env
+
+# Backups
+backups/
+
+# System Files
+.DS_Store
