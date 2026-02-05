@@ -1,211 +1,152 @@
-# Infra-Iam-PKI Documentation
+# Infra-Iam-PKI: Certified Infrastructure & Identity
 
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Maintainer:** DevOps Team
 
 ## 1. Project Overview
 
-This repository contains the Infrastructure-as-Code (IaC) for the internal **Public Key Infrastructure (PKI)** and **Identity and Access Management (IAM)** systems. It relies on Docker Compose for orchestration and provides a suite of automation scripts for certificate lifecycle management.
+This repository hosts the **Infrastructure-as-Code (IaC)** for the organization's internal Public Key Infrastructure and Identity Management.
 
-### Key Components
-
-* **Infra-PKI**: Hosted using [Smallstep CA](https://smallstep.com/). Provides internal TLS certificates.
-* **Infra-IAM**: Hosted using [Keycloak](https://www.keycloak.org/) behind [Caddy](https://caddyserver.com/). Authenticates users (optionally via Active Directory LDAPS).
-* **Automation Scripts**: A toolkit to bootstrap trust, request certificates, and perform maintenance.
+- **Infra-PKI**: Internal Certificate Authority (Step-CA) backed by PostgreSQL.
+- **Infra-IAM**: Single Sign-On (Keycloak) secured by the PKI and integrated with Active Directory.
+- **Automation Scripts**: A robust toolkit for automated host enrollment, internal trust management, and certificate renewal.
 
 ---
 
-## 2. Directory Structure
+## 2. Architecture
+
+```
+[Remote Clients] <---> [Caddy Reverse Proxy] <---> [Services]
+                                    ^
+                                    |
+          +-------------------------+-------------------------+
+          |                                                   |
+    [Infra-PKI]                                         [Infra-IAM]
+    (Step-CA + Postgres)                                (Keycloak + Postgres)
+          ^                                                   ^
+          |                                                   |
+    (Root Authority)                                  (Identity Provider)
+```
+
+---
+
+## 3. Directory Structure
 
 ```plaintext
 Infra-Iam-PKI/
-├── infra-pki/                  # PKI Service (Root CA)
-│   ├── docker-compose.yml      # Step CA, Watchtower, Setup, Fingerprint-Writer
-│   ├── step_data/              # Persistent CA data (Keys, Config, DB)
-│   └── .env                    # Configuration (Passwords, Domain)
+├── infra-pki/                  # PKI Service
+│   ├── docker-compose.yml
+│   └── doc/                    # PKI Documentation
 │
-├── infra-iam/                  # IAM Service (Keycloak + SSO)
-│   ├── docker-compose.yml      # Keycloak, Caddy, Postgres, Watchtower, Setup, Renewer
-│   ├── certs/                  # Auto-fetched certificates (do not commit)
-│   └── .env                    # Configuration (AD connection, PKI URL)
+├── infra-iam/                  # IAM Service
+│   ├── docker-compose.yml
+│   └── doc/                    # IAM Documentation
 │
 └── scripts/                    # Automation Toolkit
-    ├── fetch_root_ca.sh        # Bootstraps trust with the PKI
-    ├── fetch_ad_cert.sh        # Bootstraps trust with Active Directory
-    ├── get_certificate.sh      # Requests new certificates (OTT/Token)
-    ├── renew_certificate.sh    # Renews existing certificates
-    ├── setup_client_trust.sh   # Configures Linux clients to trust CA
-    └── maintenance_docker.sh   # System cleanup and monitoring
+    ├── infra-pki/              # Server-side Admin Scripts (generate_token, etc)
+    ├── infra-iam/              # IAM Configuration Scripts
+    └── common/                 # Portable Client Scripts (join_pki.sh)
 ```
 
 ---
 
-## 3. Deployment Guide
+## 4. Quick Start Guide
 
-### Phase 1: Deploy PKI
+### 4.1 Deploy Infrastructure
 
-The PKI must be online first as IAM depends on it.
-
-1. **Configure:** Edit `infra-pki/.env` (Set `DOMAIN_CA`, `CA_PASSWORD`, `DNSS`).
-2. **Start:**
+1. **Deploy PKI**:
+    See [Infra-PKI Deployment](doc/infra-pki/DEPLOY.md).
 
     ```bash
-    cd infra-pki
-    docker compose up -d
+    cd infra-pki && docker compose up -d
     ```
 
-3. **Verify:**
-    * Check `step_data/fingerprint` exists (created by `fingerprint-writer`).
-    * Ensure `https://<ca-domain>:9000/health` is reachable.
-
-### Phase 2: Deploy IAM
-
-IAM services will auto-configure their certificates on first launch.
-
-1. **Configure:** Edit `infra-iam/.env` (Set `CA_URL`, `AD_HOST`).
-2. **Start:**
+2. **Deploy IAM**:
+    See [Infra-IAM Deployment](doc/infra-iam/DEPLOY.md).
+    *Requires PKI to be running.*
 
     ```bash
-    cd infra-iam
-    docker compose up -d
+    cd infra-iam && docker compose up -d
     ```
 
-    *The `setup` service will fetch the Root CA and AD Certs automatically before Keycloak starts.*
+### 4.2 Establish Trust (Local Admin)
 
----
-
-## 4. Certificate Management (Scripts)
-
-Scripts are located in `scripts/`. They are designed to run on the host or in containers.
-
-### Obtaining a Certificate (New Service)
-
-Use `get_certificate.sh` to request a certificate. It supports auto-discovery of configuration.
+To manage the infrastructure, your machine must trust the internal Root CA.
 
 ```bash
-# Usage: ./get_certificate.sh <hostname> <sans>
-./scripts/get_certificate.sh my-service.biome.unibo.it
+cd scripts/infra-pki
+sudo ./manage_host_trust.sh
+# Select Option 1
 ```
 
-* **Authentication:** Prompts for CA Admin password OR uses `CA_PASSWORD` env var to generate a One-Time Token (OTT).
-* **Security:** Private keys are generated locally and never leave the host.
+---
 
-### Renewing a Certificate
+## 5. Usage Examples
 
-Certificates are short-lived (default 24h). Renewals are automated.
+### Scenario A: Enrolling a New SSH Host (Automated)
+
+You want to onboard a new database server (`db-01`) so you can SSH into it using certificates.
+
+**1. On Infra-PKI Server (Admin):**
+Generate a one-time enrollment configuration.
 
 ```bash
-./scripts/renew_certificate.sh /path/to/cert.crt /path/to/key.key
+./scripts/infra-pki/generate_token.sh
+# Input: db-01
+# Output: db-01_join_pki.env
 ```
 
-* **Exit Codes:** `0` (Renewed), `2` (No change needed/Failed). Use this to trigger service restarts.
-
-### Maintenance
-
-Run the script without arguments to see the menu:
+**2. On Remote Host (db-01):**
+Copy `join_pki.sh` and the `.env` file, then run it.
 
 ```bash
-./scripts/maintenance_docker.sh
+# (Copy files via SCP...)
+sudo ./join_pki.sh ssh-host
 ```
 
-Or use direct commands:
+*Result: `db-01` now trusts the CA, has a valid SSH Host Certificate, and will auto-renew it weekly.*
 
-* `monitor`: View stats.
-* `prune`: Clean unused resources.
-* `nuke`: **Reset System** (Stops all, removes images/volumes/networks/cache).
+### Scenario B: Configuring Infra-IAM Trust
 
----
+You re-deployed the PKI and need `infra-iam` to trust the new Root CA.
 
-## 5. Onboarding New Hosts
+**1. Generate Token/Config on PKI:**
 
-To configure a new server (e.g., a web server, database, or Kubernetes node) to use this PKI:
+```bash
+./scripts/infra-pki/generate_token.sh
+# Input: infra-iam
+```
 
-1. **Copy Scripts:** Transfer the `scripts/` directory to the new host.
-2. **Establish Trust:**
+**2. Apply on IAM Host:**
 
-    ```bash
-    ./scripts/setup_client_trust.sh https://ca.biome.unibo.it:9000 <fingerprint>
-    ```
+```bash
+./scripts/infra-iam/configure_iam_pki.sh /path/to/infra-iam_join_pki.env
+# Updates infra-iam/.env automatically
+```
 
-    *This installs the Root CA into the OS trust store (`/usr/local/share/ca-certificates`).*
-3. **Request Certificate:**
+### Scenario C: Manual Certificate Request
 
-    ```bash
-    ./scripts/get_certificate.sh new-host.biome.unibo.it
-    ```
+You have a web service and just need a simple TLS certificate.
 
-4. **Automate Renewal:**
-    Add a cron job to renew daily:
-
-    ```cron
-    0 3 * * * /path/to/scripts/renew_certificate.sh /path/to/cert.crt /path/to/cert.key && systemctl reload my-service
-    ```
+```bash
+./scripts/infra-pki/get_certificate.sh my-service.example.com
+```
 
 ---
 
-## 6. Troubleshooting
+## 6. Documentation Index
 
-### `step-ca` fails to start "password file not found"
+- **Infra-PKI**:
+  - [Overview](doc/infra-pki/OVERVIEW.md)
+  - [Deployment](doc/infra-pki/DEPLOY.md)
+  - [Configuration](doc/infra-pki/CONFIGURATION.md)
+  - [Troubleshooting](doc/infra-pki/TROUBLESHOOTING.md)
 
-* **Cause:** The `setup` container in `infra-pki` failed to write the password.
-* **Fix:** Check permissions on `infra-pki/step_data`. Ensure the `setup` service ran successfully.
-
-### "x509: certificate signed by unknown authority"
-
-* **Cause:** The client does not trust the Root CA.
-* **Fix:** Run `./scripts/setup_client_trust.sh` or ensure `infra-iam` mounted the `root_ca.crt` correctly.
-
-### Watchtower "Client version 1.25 is too old"
-
-* **Cause:** Docker Compose file using old protocol.
-* **Fix:** Ensure `DOCKER_API_VERSION=1.44` is set in Watchtower environment (already applied in `docker-compose.yml`).
-
-### Re-initializing PKI (Changing Domain/Passwords)
-
-* **Problem:** Changing `DOMAIN_CA` or passwords in `.env` has no effect.
-* **Cause:** `step-ca` only initializes once. Subsequent runs use the persisted configuration in the `step_data` volume.
-* **Fix:** You must manually delete the data to force a rebuild.
-
-    ```bash
-    cd infra-pki
-    docker compose down
-    sudo rm -rf step_data/   # ⚠️ WARNING: Deletes all existing keys/certs!
-    sudo rm -rf logs/
-    docker compose up -d
-    ```
-
-    *Note: After this, the Root CA Fingerprint will change. Update `infra-iam/.env` and re-issue all service certificates.*
-
----
-
-## 7. Best Practices & Security
-
-### Secrets Management
-
-* **Current:** Passwords are in `.env` files.
-* **Recommendation:** For production, move sensitive credentials (CA password, DB password) to **Docker Secrets** or a Vault (HashiCorp Vault).
-
-### Root CA Protection
-
-* The Root Key is currently online (in `step_data/secrets`).
-* **High Security:** Move the Root CA to an offline machine (air-gapped) and use an **Intermediate CA** in Docker for daily signing.
-
-### Monitoring
-
-* Container logs are rotated (`json-file`, max 15MB).
-* Use `maintenance_docker.sh monitor` for quick checks.
-* **Future:** Ship logs to an ELK stack or Graylog.
-
----
-
-## 8. Future Roadmap: High Availability (HA)
-
-To move this setup to a Clustered/HA environment (Kubernetes):
-
-1. **Storage:** The `step_data` volume must be shared (PVC, NFS, or Ceph) OR use an external Database (PostgreSQL/MySQL) for Step CA.
-2. **Identity:** Keycloak handles Clustering natively (Infinispan). It requires `JDBC_PING` or `DNS_PING` for discovery.
-3. **Ingress:** Replace Caddy with Nginx Ingress Controller or Traefik, terminating TLS using certificates managed by **cert-manager**.
-    * **Cert-Manager Integration:** `cert-manager` has a native `StepIssuer`. It can talk directly to your `infra-pki` to provision certs for K8s pods automatically.
+- **Infra-IAM**:
+  - [Overview](doc/infra-iam/OVERVIEW.md)
+  - [Deployment](doc/infra-iam/DEPLOY.md)
+  - [Configuration](doc/infra-iam/CONFIGURATION.md)
+  - [Troubleshooting](doc/infra-iam/TROUBLESHOOTING.md)
 
 ---
 *Generated by Antigravity Assistant*
