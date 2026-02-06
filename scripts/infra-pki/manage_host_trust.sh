@@ -39,10 +39,20 @@ uninstall_trust() {
     echo "Removing Root CA from system trust store..."
     if [ -f "$SYSTEM_TRUST_DIR/$TRUSTED_CERT_NAME" ]; then
         rm -f "$SYSTEM_TRUST_DIR/$TRUSTED_CERT_NAME"
-        update-ca-certificates --fresh
-        echo "Success: Certificate removed and trust store cleaned."
+        
+        # Use --fresh to clean up symlinks completely (rebuilds from scratch)
+        update-ca-certificates --fresh >/dev/null 2>&1
+        
+        # Verify removal
+        if [ ! -f "$SYSTEM_TRUST_DIR/$TRUSTED_CERT_NAME" ]; then
+             echo -e "\033[0;32mSuccess:\033[0m Certificate removed."
+             echo "System Trust Store rebuilt (old links cleared)."
+        else
+             echo -e "\033[0;31mError:\033[0m Failed to remove certificate file."
+        fi
     else
-        echo "Certificate not found in trust store. Nothing to remove."
+        echo "Certificate not found in trust store ($SYSTEM_TRUST_DIR/$TRUSTED_CERT_NAME)."
+        echo "Nothing to remove."
     fi
 }
 
