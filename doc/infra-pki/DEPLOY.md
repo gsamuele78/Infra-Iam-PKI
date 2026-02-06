@@ -14,9 +14,8 @@ This document outlines the steps to initialize, deploy, and verify the `infra-pk
 Before starting, ensure `infra-pki/.env` is configured.
 > **Critical**: Do not commit the `.env` file to version control.
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
 | `DOMAIN_CA` | DNS for the CA | `ca.example.com` |
+| `PKI_NAME` | CA Subject/Issuer Name | `Internal Root CA` |
 | `CA_PASSWORD` | Password for the Root CA Key | *ChangeMe* |
 | `POSTGRES_DB` | Database Name | `step_ca_db` |
 | `ALLOWED_IPS` | CIDR blocks allowed to access CA | `127.0.0.1/32 ...` |
