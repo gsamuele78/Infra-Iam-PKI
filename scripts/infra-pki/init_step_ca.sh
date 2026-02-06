@@ -35,17 +35,20 @@ export STEP_CA_URL="https://step-ca:9000"
 
 # Helper to detect Admin Provisioner Name
 get_admin_provisioner_name() {
-    if command -v jq &> /dev/null; then
-        jq -r '.authority.provisioners[] | select(.type=="JWK") | .name' /home/step/config/ca.json | head -n 1
-    else
-        echo "Admin JWK"
+    # Try to read from ca.json if it exists (for file-based setups)
+    if command -v jq &> /dev/null && [ -f /home/step/config/ca.json ]; then
+        local name=$(jq -r '.authority.provisioners[]? | select(.type=="JWK") | .name' /home/step/config/ca.json 2>/dev/null | head -n 1)
+        if [ -n "$name" ] && [ "$name" != "null" ]; then
+            echo "$name"
+            return
+        fi
     fi
+    # Default fallback (Standard for step-ca init)
+    echo "Admin JWK"
 }
 
 ADMIN_PROVISIONER_NAME=$(get_admin_provisioner_name)
-if [[ -z "$ADMIN_PROVISIONER_NAME" || "$ADMIN_PROVISIONER_NAME" == "null" ]]; then
-    ADMIN_PROVISIONER_NAME="Admin JWK"
-fi
+echo "Using Admin Provisioner: '$ADMIN_PROVISIONER_NAME'"
 echo "Using Admin Provisioner: '$ADMIN_PROVISIONER_NAME'"
 
 # Authenticate as admin (Generate Token unconditionally)
