@@ -58,10 +58,42 @@ Defined in `.env` as `ALLOWED_IPS`.
 * Format: Space-separated CIDR blocks (e.g., `127.0.0.1/32 10.0.0.0/8`).
 * Mechanism: Caddy's `@allowed` matcher drops connections from undefined IPs before they reach `step-ca`.
 
-## 3. Database Configuration
+## 4. Configuration Management
 
-PostgreSQL is configured strictly for internal access.
+**NEW**: A dedicated configuration manager is available to manage secrets and settings without manually editing files.
 
-* **User/Pass**: Defined in `.env`.
-* **Persistence**: Data stored in `./infra-pki/db_data`.
-* **Connection**: `step-ca` connects via the Docker service name `postgres`.
+* **Script**: `scripts/infra-pki/configure_pki.sh`
+* **Features**:
+  * Edit `.env` safely.
+  * Edit Secrets (passwords).
+  * Edit `ALLOWED_IPS`.
+  * Apply changes (restarts container stack).
+  * Test Provisioners.
+
+## 5. Backup & Recovery
+
+A robust backup script is provided to ensure business continuity.
+
+* **Script**: `scripts/infra-pki/backup_pki.sh`
+* **Features**:
+  * Snapshots `step_data` directory (configurations, roots).
+  * Dumps PostgreSQL database (requires `docker exec` access).
+  * Backups up `.env` file.
+  * Auto-rotates backups (retention policy).
+* **Usage**:
+
+    ```bash
+    sudo ./backup_pki.sh
+    ```
+
+    Backups are stored in `/backup/infra-pki` (configurable).
+
+## 6. Token Generation & Enrollment
+
+For automating client enrollment, do not use `step ca token` manually.
+
+* **Script**: `scripts/infra-pki/generate_token.sh`
+* **Usage**: Generates a secure, one-time enrollment token and a `join_pki.env` file.
+* **Security**:
+  * Uses Docker Secrets or `.env` passwords properly without exposing them in shell history.
+  * Auto-detects the correct SSH Provisioner.

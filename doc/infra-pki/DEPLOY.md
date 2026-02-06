@@ -6,6 +6,7 @@ This document outlines the steps to initialize, deploy, and verify the `infra-pk
 
 * Docker & Docker Compose (v2.x recommended)
 * Git
+* `openssl` (for certificate verification)
 * `sudo` privileges for port binding (9000) and trust script execution.
 
 ## 2. Configuration (`.env`)
@@ -18,7 +19,7 @@ Before starting, ensure `infra-pki/.env` is configured.
 | `DOMAIN_CA` | DNS for the CA | `ca.example.com` |
 | `CA_PASSWORD` | Password for the Root CA Key | *ChangeMe* |
 | `POSTGRES_DB` | Database Name | `step_ca_db` |
-| `ALLOWED_IPS` | CIDR blocks allowed to access CA | `127.0.0.1/32 172.18.0.0/16 ...` (Must include Docker Bridge for healthchecks) |
+| `ALLOWED_IPS` | CIDR blocks allowed to access CA | `127.0.0.1/32 ...` |
 | `ENABLE_SSH_PROVISIONER`| Enable SSH Host support | `true` |
 | `SSH_HOST_PROVISIONER_PASSWORD` | Password for SSH Host JWK | *ChangeMe* |
 
@@ -27,16 +28,17 @@ Before starting, ensure `infra-pki/.env` is configured.
 If initializing for the first time or after a reset:
 
 1. **Clean State** (Optional):
+    You can use the dedicated reset script to safely wipe data:
 
     ```bash
-    cd infra-pki
-    docker compose down -v
-    sudo rm -rf step_data db_data
+    cd ../scripts/infra-pki
+    sudo ./reset_pki.sh
     ```
 
 2. **Build and Start**:
 
     ```bash
+    cd ../../infra-pki
     docker compose up -d --build
     ```
 
@@ -56,7 +58,7 @@ To allow your host machine to trust certificates issued by this internal CA:
 1. Navigate to scripts:
 
     ```bash
-    cd ../scripts
+    cd ../scripts/infra-pki
     ```
 
 2. Run the trust manager:
@@ -66,21 +68,40 @@ To allow your host machine to trust certificates issued by this internal CA:
     ```
 
 3. Select **Option 1 (Install/Trust)**.
+   You can also verify certificate details (Issuer, Validity) using **Option 3**.
 
 ## 5. Verification
 
-Run the following checks to confirm operational status:
+Run the comprehensive verification script to confirm operational status:
 
-1. **Health Endpoint**:
+```bash
+./verify_pki.sh
+```
 
-    ```bash
-    curl -k https://localhost:9000/health
-    # Expected: {"status":"ok"}
-    ```
+This script checks:
 
-2. **Fingerprint**:
-    The system should auto-generate the root fingerprint in `infra-pki/step_data/fingerprint`.
+* Container Health (Step-CA, Postgres, Caddy)
+* Caddy Layer 4 Check (TCP Port 9000)
+* Step-CA API connectivity
+* Database Readability
+* Provisioner Status (SSH, Admin, ACME)
 
-    ```bash
-    cat infra-pki/step_data/fingerprint
-    ```
+## 6. Client Enrollment
+
+To enroll a remote host (e.g., `infra-iam`):
+
+1. **Generate Token** (on Server):
+
+   ```bash
+   ./generate_token.sh
+   # Follow prompts. Output: <hostname>_join_pki.env
+   ```
+
+2. **Deploy to Client**:
+   Copy `client/join_pki.sh` and the generated `.env` to the client.
+
+3. **Join** (on Client):
+
+   ```bash
+   sudo ./join_pki.sh ssh-host
+   ```

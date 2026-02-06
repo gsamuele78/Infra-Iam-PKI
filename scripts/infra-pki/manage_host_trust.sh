@@ -65,6 +65,17 @@ show_menu() {
             else
                 echo "Fingerprint file not found."
             fi
+            
+            if [ -f "$CA_CERT_PATH" ]; then
+                echo ""
+                echo "--- Certificate Details ---"
+                if command -v openssl &>/dev/null; then
+                    openssl x509 -in "$CA_CERT_PATH" -noout -subject -issuer -dates
+                    echo "---------------------------"
+                else
+                    echo "OpenSSL not found. Cannot display details."
+                fi
+            fi
             ;;
         4) exit 0 ;;
         *) echo "Invalid option." ;;
