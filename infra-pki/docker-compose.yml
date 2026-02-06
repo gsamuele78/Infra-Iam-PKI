@@ -75,7 +75,7 @@ services:
       DOCKER_STEPCA_INIT_PASSWORD_FILE: /home/step/secrets/password
       STEP_CA_PASSWORD_FILE: /home/step/secrets/password
       # PostgreSQL Connection
-      PGHOST: postgres
+      PGHOST: step-ca-db
       PGPORT: 5432
       PGUSER: ${POSTGRES_USER}
       PGPASSWORD: ${POSTGRES_PASSWORD}
