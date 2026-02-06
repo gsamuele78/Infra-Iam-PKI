@@ -28,7 +28,12 @@ if [ -f "$CA_CONFIG" ]; then
     # Update configuration using jq
     # DSN format: postgresql://user:password@host:port/dbname?sslmode=disable
     # Using PG* variables as defined in docker-compose environment
-    DSN="postgresql://${PGUSER}:${PGPASSWORD}@postgres:5432/${PGDATABASE}?sslmode=disable"
+
+    # URL Encode credentials using jq
+    PGUSER_ENC=$(jq -nr --arg v "$PGUSER" '$v|@uri')
+    PGPASSWORD_ENC=$(jq -nr --arg v "$PGPASSWORD" '$v|@uri')
+
+    DSN="postgresql://${PGUSER_ENC}:${PGPASSWORD_ENC}@postgres:5432/${PGDATABASE}?sslmode=disable"
     
     # Apply jq filter
     jq --arg dsn "$DSN" \
