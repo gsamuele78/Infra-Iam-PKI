@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+
+CA_CONFIG="/home/step/config/ca.json"
+TEMP_CONFIG="/home/step/config/ca.json.tmp"
+
+# Check if file exists
+if [ ! -f "$CA_CONFIG" ]; then
+    echo "ca.json not found, skipping patch."
+    exit 0
+fi
+
+# Check if using BadgerDB (default)
+if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
+    echo "Patching ca.json to use PostgreSQL..."
+    
+    # Verify jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Error: jq is required but not found in container."
+        exit 1
+    fi
+
+    # Update configuration using jq
+    # DSN ends with / as requested by user pattern "postgresql://user:password@host:port/"
+    DSN="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/"
+    
+    # Apply jq filter
+    jq --arg dsn "$DSN" \
+       --arg db "$POSTGRES_DB" \
+       '.db = {
+         "type": "postgresql",
+         "dataSource": $dsn,
+         "database": $db
+       }' "$CA_CONFIG" > "$TEMP_CONFIG"
+
+    # Verify and replace
+    if [ -s "$TEMP_CONFIG" ]; then
+        mv "$TEMP_CONFIG" "$CA_CONFIG"
+        echo "Patch applied successfully. New DB config:"
+        jq '.db' "$CA_CONFIG"
+    else
+        echo "Error: Failed to patch ca.json (empty output)."
+        rm -f "$TEMP_CONFIG"
+        exit 1
+    fi
+else
+    echo "Configuration already patched or not using BadgerDB."
+fi
