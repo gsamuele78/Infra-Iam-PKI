@@ -20,6 +20,11 @@ if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
         exit 1
     fi
 
+    # DEBUG: Print variables to logs
+    echo "DEBUG: PGUSER='${PGUSER}'"
+    echo "DEBUG: PGDATABASE='${PGDATABASE}'"
+    echo "DEBUG: PGPASSWORD is set? (len=${#PGPASSWORD})"
+
     # Update configuration using jq
     # DSN format: postgresql://user:password@host:port/dbname?sslmode=disable
     # Using PG* variables as defined in docker-compose environment
@@ -33,6 +38,8 @@ if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
          "dataSource": $dsn,
          "database": $db
        }' "$CA_CONFIG" > "$TEMP_CONFIG"
+
+    echo "DEBUG: Generated DSN: $DSN"
 
     # Verify and replace
     if [ -s "$TEMP_CONFIG" ]; then
