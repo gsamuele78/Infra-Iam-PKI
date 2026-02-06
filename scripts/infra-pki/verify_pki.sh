@@ -6,7 +6,7 @@ echo "   PKI Infrastructure Verification"
 echo "======================================"
 echo ""
 
-cd /opt/docker/Infra-Iam-PKI/infra-pki
+cd /opt/docker/Infra-Iam-PKI/infra-pki || exit
 
 echo "1. Container Status:"
 echo "--------------------"
