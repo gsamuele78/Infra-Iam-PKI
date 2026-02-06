@@ -151,7 +151,7 @@ REQUIRED_DIRS=("step_data" "db_data" "logs" "logs/step-ca" "logs/postgres" "logs
 
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$PKI_DIR/$dir" ]; then
-        warning "Directory $dir does not exist (will be created on first run)"
+        success "Directory $dir does not exist (will be created on first run)"
     fi
 done
 
