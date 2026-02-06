@@ -21,8 +21,8 @@ if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
     fi
 
     # Update configuration using jq
-    # DSN ends with / as requested by user pattern "postgresql://user:password@host:port/"
-    DSN="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/"
+    # DSN format: postgresql://user:password@host:port/dbname?sslmode=disable
+    DSN="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
     
     # Apply jq filter
     jq --arg dsn "$DSN" \
