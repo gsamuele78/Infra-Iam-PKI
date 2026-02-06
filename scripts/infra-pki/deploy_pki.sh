@@ -25,9 +25,34 @@ cat << "EOF"
 EOF
 echo -e "${NC}"
 
+# Argument Parsing
+DOCKER_LOGIN=false
+if [[ "$*" == *"--login"* ]]; then
+    DOCKER_LOGIN=true
+fi
+
 # Check if running as root (needed for some operations)
 if [ "$EUID" -ne 0 ]; then
     echo -e "${YELLOW}⚠ Not running as root. Some operations may require sudo.${NC}"
+fi
+
+# Docker Login (Optional)
+if [ "$DOCKER_LOGIN" = "true" ]; then
+    echo ""
+    echo -e "${BLUE}[Docker Login] Authenticating with Docker Hub...${NC}"
+    echo "Note: Login allows up to 200 pulls/6 hours (Free) instead of 100."
+    echo "Enter your Docker Hub credentials:"
+    
+    if docker login; then
+        echo -e "${GREEN}✓ Docker Login successful${NC}"
+    else
+        echo -e "${RED}✗ Docker Login failed${NC}"
+        read -p "Continue without login? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
 fi
 
 # Step 1: Validate configuration
