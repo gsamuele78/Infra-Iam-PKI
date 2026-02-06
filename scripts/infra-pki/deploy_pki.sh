@@ -30,10 +30,11 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Step 1: Validate configuration
-echo -e "${BLUE}[Step 1/7] Validating configuration...${NC}"
+echo -e "${BLUE}[Step 1/7] Validating configuration (Pre-flight)...${NC}"
 if [ -f "$SCRIPT_DIR/validate_config.sh" ]; then
     chmod +x "$SCRIPT_DIR/validate_config.sh"
-    if "$SCRIPT_DIR/validate_config.sh"; then
+    # Run only pre-deployment checks (static analysis)
+    if "$SCRIPT_DIR/validate_config.sh" --pre-deploy; then
         echo -e "${GREEN}✓ Configuration validated${NC}"
     else
         echo -e "${RED}✗ Configuration validation failed${NC}"
@@ -128,6 +129,12 @@ sleep 15
 # Step 7: Verify deployment
 echo ""
 echo -e "${BLUE}[Step 7/7] Verifying deployment...${NC}"
+
+# Post-deployment validation (Runtime connectivity checks)
+if [ -f "$SCRIPT_DIR/validate_config.sh" ]; then
+    echo "Running post-deployment validation..."
+    "$SCRIPT_DIR/validate_config.sh" --post-deploy || echo -e "${YELLOW}⚠ Post-deploy checks found issues${NC}"
+fi
 
 # Check container status
 echo "Container status:"

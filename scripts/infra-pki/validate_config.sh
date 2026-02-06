@@ -15,10 +15,19 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-ERRORS=0
-WARNINGS=0
+# Default mode
+MODE="all"
 
-echo -e "${BLUE}=== Infra-PKI Configuration Validator ===${NC}"
+# Parse arguments
+if [ "$#" -ge 1 ]; then
+    case "$1" in
+        --pre-deploy) MODE="pre" ;;
+        --post-deploy) MODE="post" ;;
+        *) echo "Usage: $0 [--pre-deploy|--post-deploy]"; exit 1 ;;
+    esac
+fi
+
+echo -e "${BLUE}=== Infra-PKI Configuration Validator (Mode: $MODE) ===${NC}"
 echo "Checking: $PKI_DIR"
 echo ""
 
@@ -38,6 +47,12 @@ warning() {
 success() {
     echo -e "${GREEN}✓ $1${NC}"
 }
+
+# ==========================================
+# PRE-DEPLOYMENT CHECKS
+# Static files, syntax, permissions, ports
+# ==========================================
+if [[ "$MODE" == "all" || "$MODE" == "pre" ]]; then
 
 # Check 1: .env file exists
 echo "Checking .env file..."
@@ -227,6 +242,14 @@ else
     error "Docker daemon is not running or not accessible"
 fi
 
+fi # END PRE-DEPLOY CHECKS
+
+# ==========================================
+# POST-DEPLOYMENT CHECKS
+# Runtime connectivity, DB checks
+# ==========================================
+if [[ "$MODE" == "all" || "$MODE" == "post" ]]; then
+
 # Check 12: PostgreSQL Connectivity (if running)
 echo ""
 echo "Checking PostgreSQL..."
@@ -274,9 +297,11 @@ if [ -f "$PKI_DIR/.env" ]; then
     fi
 fi
 
+fi # END POST-DEPLOY CHECKS
+
 # Summary
 echo ""
-echo "=== Validation Summary ==="
+echo "=== Validation Summary ($MODE) ==="
 echo -e "Errors:   ${RED}$ERRORS${NC}"
 echo -e "Warnings: ${YELLOW}$WARNINGS${NC}"
 echo ""
