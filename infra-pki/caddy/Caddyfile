@@ -1,18 +1,20 @@
 {
 	admin off
-	log {
-		output file /var/log/caddy/caddy.log
-		format json
+	layer4 {
+		:9000 {
+			@allowed remote_ip {$ALLOWED_IPS}
+			route @allowed {
+				proxy step-ca:9000
+			}
+		}
 	}
-}
-
-layer4 {
-	:9000 {
-		@allowed {
-			remote_ip {$ALLOWED_IPS}
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
 		}
-		route @allowed {
-			proxy step-ca:9000
-		}
+		format json
+		level INFO
 	}
 }
