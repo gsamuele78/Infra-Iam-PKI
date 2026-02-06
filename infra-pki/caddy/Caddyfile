@@ -1,5 +1,5 @@
 {
-	admin off
+
 	layer4 {
 		"0.0.0.0:9000" {
 			@allowed remote_ip {$ALLOWED_IPS}

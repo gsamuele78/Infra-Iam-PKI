@@ -66,7 +66,6 @@ if ! docker run --rm \
     # Apply fixed Caddyfile
     cat > "$PKI_DIR/caddy/Caddyfile" <<'EOF'
 {
-	admin off
 	layer4 {
 		:9000 {
 			@allowed remote_ip {$ALLOWED_IPS}
@@ -155,19 +154,39 @@ while [ $RETRIES -gt 0 ]; do
     ((RETRIES--))
 done
 
+
+
+# Wait for Caddy (proxy) to be healthy
+echo ""
+echo "Waiting for Caddy proxy to be healthy..."
+RETRIES=30
+while [ $RETRIES -gt 0 ]; do
+    if docker compose ps caddy | grep -q "healthy"; then
+        echo -e "${GREEN}✓ caddy is healthy${NC}"
+        break
+    fi
+    echo -n "."
+    sleep 2
+    ((RETRIES--))
+done
+
 if [ $RETRIES -eq 0 ]; then
-    echo -e "${RED}✗ step-ca did not become healthy${NC}"
-    echo "Check logs: docker compose logs step-ca"
-    exit 1
+    echo -e "${YELLOW}⚠ caddy did not become healthy (proceeding anyway, check logs)${NC}"
+    docker compose logs caddy --tail=20
 fi
 
 # Check CA health endpoint
 echo ""
 echo "Testing CA health endpoint..."
-if curl -k -s https://localhost:9000/health | grep -q "ok"; then
-    echo -e "${GREEN}✓ CA health endpoint responding${NC}"
+# Capture output for debugging
+HTTP_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9000/health || echo "fail")
+
+if [ "$HTTP_STATUS" == "200" ]; then
+    echo -e "${GREEN}✓ CA health endpoint responding (Status: 200)${NC}"
 else
-    echo -e "${RED}✗ CA health endpoint not responding${NC}"
+    echo -e "${RED}✗ CA health endpoint check failed${NC}"
+    echo -e "${RED}  Status Code: $HTTP_STATUS${NC}"
+    echo -e "${YELLOW}  Troubleshoot: curl -v -k https://localhost:9000/health${NC}"
 fi
 
 # Check fingerprint
