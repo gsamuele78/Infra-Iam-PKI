@@ -227,6 +227,53 @@ else
     error "Docker daemon is not running or not accessible"
 fi
 
+# Check 12: PostgreSQL Connectivity (if running)
+echo ""
+echo "Checking PostgreSQL..."
+# Source .env if available to get credentials
+if [ -f "$PKI_DIR/.env" ]; then
+    source "$PKI_DIR/.env"
+    # Check if we can reach the DB container if it's running
+    if docker compose -f "$PKI_DIR/docker-compose.yml" ps postgres | grep -q "Up"; then
+        echo "  Testing Postgres connection inside container..."
+        if docker compose -f "$PKI_DIR/docker-compose.yml" exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"; then
+             success "PostgreSQL is accepting connections"
+        else
+             error "PostgreSQL is running but not accepting connections"
+        fi
+    else
+        warning "PostgreSQL container is not running (cannot verify connection now)"
+    fi
+    
+    # Check 13: Step-CA Config DB Connection
+    # Verify if ca.json exists and uses postgres
+    CA_JSON="$PKI_DIR/step_data/config/ca.json"
+    if [ -f "$CA_JSON" ]; then
+        echo "  Checking Step-CA database configuration..."
+        if grep -q '"type": "postgresql"' "$CA_JSON" || grep -q '"type":"postgresql"' "$CA_JSON"; then
+            success "Step-CA is configured to use PostgreSQL"
+        elif grep -q '"type": "badgerv2"' "$CA_JSON"; then
+             error "Step-CA is configured to use BadgerDB (embedded). Reset required for Postgres."
+        else
+             warning "Unknown Step-CA DB type in ca.json"
+        fi
+    fi
+
+    # Check 14: Cross-Container Connectivity (Step-CA -> Postgres)
+    echo "  Testing network path from step-ca to postgres:5432..."
+    if docker compose -f "$PKI_DIR/docker-compose.yml" ps step-ca | grep -q "Up"; then
+        # Use bash /dev/tcp as step-ca container has bash installed
+        if docker compose -f "$PKI_DIR/docker-compose.yml" exec -T step-ca bash -c 'timeout 3 bash -c "cat < /dev/null > /dev/tcp/postgres/5432" 2>/dev/null'; then
+             success "step-ca can reach postgres:5432"
+        else
+             error "step-ca CANNOT reach postgres:5432"
+             echo "    > Possible causes: DNS failure for 'postgres', Docker network isolation, or Postgres not ready."
+        fi
+    else
+         warning "step-ca container is not running (cannot verify cross-container connection)"
+    fi
+fi
+
 # Summary
 echo ""
 echo "=== Validation Summary ==="
