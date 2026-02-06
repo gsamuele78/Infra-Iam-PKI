@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+# fix
 # deploy_pki.sh
 # Comprehensive deployment script for Infra-PKI
 # Location: /opt/docker/Infra-Iam-PKI/scripts/infra-pki/deploy_pki.sh
