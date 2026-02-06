@@ -18,7 +18,7 @@ Before starting, ensure `infra-pki/.env` is configured.
 | `DOMAIN_CA` | DNS for the CA | `ca.example.com` |
 | `CA_PASSWORD` | Password for the Root CA Key | *ChangeMe* |
 | `POSTGRES_DB` | Database Name | `step_ca_db` |
-| `ALLOWED_IPS` | CIDR blocks allowed to access CA | `127.0.0.1/32 ...` |
+| `ALLOWED_IPS` | CIDR blocks allowed to access CA | `127.0.0.1/32 172.18.0.0/16 ...` (Must include Docker Bridge for healthchecks) |
 | `ENABLE_SSH_PROVISIONER`| Enable SSH Host support | `true` |
 | `SSH_HOST_PROVISIONER_PASSWORD` | Password for SSH Host JWK | *ChangeMe* |
 
