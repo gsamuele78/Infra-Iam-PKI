@@ -123,7 +123,7 @@ echo -e "${BLUE}[Step 6/7] Deploying services...${NC}"
 docker compose up -d
 
 echo "Waiting for services to initialize..."
-sleep 10
+sleep 15
 
 # Step 7: Verify deployment
 echo ""
