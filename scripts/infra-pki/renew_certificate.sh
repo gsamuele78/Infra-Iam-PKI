@@ -15,7 +15,14 @@ KEY_FILE=$(realpath "$2")
 CRT_FILE=$(realpath "$1")
 KEY_FILE=$(realpath "$2")
 # Default to internal generic name, or read from env
-CA_URL="${CA_URL:-https://step-ca:9000}"
+# Priority: STEP_CA_URL -> https://DOMAIN_CA:9000 -> https://localhost:9000
+if [ -n "${STEP_CA_URL:-}" ]; then
+    CA_URL="$STEP_CA_URL"
+elif [ -n "${DOMAIN_CA:-}" ]; then
+    CA_URL="https://${DOMAIN_CA}:9000"
+else
+    CA_URL="https://localhost:9000"
+fi
 
 # Check if file exists
 if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
@@ -31,22 +38,11 @@ echo "Checking expiration for $CRT_FILE..."
 # We want "if renewed -> restart".
 # Usage: step ca renew ... || exit_code
 
-# We use --expires-in to force check? No, default behavior is good.
-# Problem: 'step ca renew' might fail if not ready to renew.
-
-# Better logic:
-# 1. Check if eligible.
-# 2. If yes, renew.
-# 3. If renewed, return 0. Else return 2.
-
-# For now, simplistic approach: use --force only if we determine it's close to expiry?
-# Or just run it and capture output?
-
-# If we run 'step ca renew', it updates the file in place.
-# We can check timestamp before and after.
-
+# We use system stat to check timestamp change
 TS_BEFORE=$(stat -c %Y "$CRT_FILE")
+
 docker run --rm \
+    --network host \
     -v "$(dirname "$CRT_FILE")":/home/step \
     --user $(id -u):$(id -g) \
     smallstep/step-cli \

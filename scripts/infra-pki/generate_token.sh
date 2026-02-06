@@ -76,7 +76,19 @@ echo "1. SSH Host (authorize host for SSH)"
 echo ""
 read -p "Choice [1]: " TYPE
 
-PROVISIONER="ssh-host-jwk" # Default we configured
+# --- Auto-Detect SSH Provisioner ---
+echo "Detecting SSH Provisioner..."
+# Look for a provisioner that looks like an SSH Host JWK provisioner (by name convetion or type)
+# We default to 'ssh-host-jwk' which is standard
+DETECTED_SSH_PROV=$(docker exec step-ca step ca provisioner list 2>/dev/null | grep -B 5 '"type": "JWK"' | grep '"name":' | grep "ssh-host" | head -n 1 | cut -d'"' -f4)
+
+if [ -n "$DETECTED_SSH_PROV" ]; then
+    PROVISIONER="$DETECTED_SSH_PROV"
+    echo "Auto-detected SSH Provisioner: '$PROVISIONER'"
+else
+    PROVISIONER="ssh-host-jwk" # Default fallback
+    echo "Could not auto-detect SSH provisioner. Using default: '$PROVISIONER'"
+fi
 
 # 3. Generate
 echo ""

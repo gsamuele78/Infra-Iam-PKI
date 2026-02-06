@@ -35,30 +35,57 @@ if [ ! -s /tmp/root_ca.crt ]; then
     exit 1
 fi
 
-# Validation (Basic)
+# Validation
 if [ -n "$FINGERPRINT" ]; then
-    echo "Fingerprint provided. (Verification logic placeholder)"
-    # Ideally: step certificate inspect ... but 'step' might not be installed.
-    # OpenSSL check is complex for fingerprint format matching.
+    echo "Verifying Fingerprint..."
+    if command -v openssl &>/dev/null; then
+        # Calculate SHA256 fingerprint of the downloaded file
+        # formatting: SHA256 Fingerprint=XX:XX...
+        CALC_FP=$(openssl x509 -in /tmp/root_ca.crt -noout -fingerprint -sha256 | cut -d= -f2 | tr -d :)
+        EXPECTED_FP=$(echo "$FINGERPRINT" | tr -d :)
+        
+        if [[ "${CALC_FP,,}" == "${EXPECTED_FP,,}" ]]; then
+            echo -e "Fingerprint Match: \033[0;32mOK\033[0m"
+        else
+            echo "Error: Fingerprint Mismatch!"
+            echo "Expected: $EXPECTED_FP"
+            echo "Actual:   $CALC_FP"
+            exit 1
+        fi
+    else
+        echo "Warning: 'openssl' not found. Skipping fingerprint verification."
+    fi
 else
-    echo "Warning: No fingerprint provided. Trusting server response implicitly."
+    echo "Warning: No fingerprint provided. Trusting server response implicitly (TOFU)."
 fi
 
 # 2. Install to OS Store
 if [ -d "/usr/local/share/ca-certificates" ]; then
-    echo "Installing to /usr/local/share/ca-certificates/..."
-    sudo cp /tmp/root_ca.crt /usr/local/share/ca-certificates/internal_ca.crt
-    sudo update-ca-certificates
+    # Debian/Ubuntu
+    echo "Detected Debian/Ubuntu system."
+    SRC_DIR="/usr/local/share/ca-certificates"
+    CMD="update-ca-certificates"
+    EXT="crt"
+    sudo cp /tmp/root_ca.crt "$SRC_DIR/internal_ca.$EXT"
+    sudo $CMD
+elif [ -d "/etc/pki/ca-trust/source/anchors" ]; then
+    # RHEL/Fedora/CentOS
+    echo "Detected RHEL/CentOS system."
+    SRC_DIR="/etc/pki/ca-trust/source/anchors"
+    CMD="update-ca-trust extract"
+    EXT="pem" # RHEL often prefers pem extension, though crt usually works
+    sudo cp /tmp/root_ca.crt "$SRC_DIR/internal_ca.$EXT"
+    sudo $CMD
 else
-    echo "Error: /usr/local/share/ca-certificates not found. Is this a Debian/Ubuntu system?"
+    echo "Error: Unknown OS certificate store location. Install manually from /tmp/root_ca.crt"
     exit 1
 fi
 
 # 3. Verify
 echo "Verifying trust..."
+# Explicitly use curl with the installed CA store (default)
 if curl -I "$CA_URL/health" 2>/dev/null; then
     echo "Success! Client now trusts the Internal CA."
 else
-    echo "Warning: CA Health Verification failed (curl -I). Trusted?"
-    # It might fail if no routes, but cert installation might still be correct.
+    echo "Warning: CA Health Verification failed (curl -I). Check network/DNS."
 fi

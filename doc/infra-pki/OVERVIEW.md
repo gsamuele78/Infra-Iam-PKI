@@ -29,10 +29,12 @@ The architecture is designed for **high availability**, **security**, and **obse
 * **SSH Certificate Management**:
   * **JWK Provisioner**: For initial bootstrapping of SSH hosts.
   * **SSH-POP Provisioner**: For secure, automated renewal of host certificates.
-* **Host Trust Management**: Dedicated script `manage_host_trust.sh` to safely install the internal Root CA on the host OS.
+* **Host Trust Management**: Dedicated script `manage_host_trust.sh` to safely install the internal Root CA on the server host.
+* **Client Tooling**: A dedicated `client/` directory containing standalone scripts (`join_pki.sh`) for enrolling remote hosts without needing the full repo.
 
 ## 4. Security Considerations
 
 * **Network Isolation**: Database is not exposed. CA is only accessible via the Proxy.
-* **Secrets Management**: Critical secrets (CA password, OIDC Client Secret) are injected via `docker-compose.yml` from a secured `.env` file. *Recommendation: Integrate with **Docker Secrets** (Open Source) or **OpenBao** (Open Source fork of Vault) in production.*
+* **Secrets Management**: Critical secrets (CA password, OIDC Client Secret) are injected via `docker-compose.yml` from a secured `.env` file.
 * **Ephemeral Tokens**: Uses short-lived tokens for provisioning to minimize attack surface.
+* **Script Hardening**: All scripts utilize `set -euo pipefail` and avoid passing passwords via command-line arguments (using temporary files or stdin).

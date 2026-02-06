@@ -4,7 +4,7 @@
 set -e
 
 # Configuration
-PROJECT_DIR="/opt/docker/Infra-Iam-PKI/infra-pki"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../infra-pki" && pwd)"
 BACKUP_ROOT="/backup/infra-pki"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
@@ -23,27 +23,28 @@ else
     echo "Warning: step_data directory not found."
 fi
 
+# Source .env to get DB credentials
+if [ -f "$PROJECT_DIR/.env" ]; then
+    source "$PROJECT_DIR/.env"
+fi
+
 # 2. Backup Database (Postgres)
-# Using docker exec to dump the database from the running container
 if docker ps | grep -q step-ca-db; then
     echo "Backing up Postgres database..."
-    # Note: Assuming user 'step' is the db user based on previous context, 
-    # but strictly checking compose might be better. 
-    # The user provided snippet used 'step_ca_user' and 'step_ca_db'.
-    # I should verify these. For now I'll use the environment variables from .env if possible or defaults.
-    # Actually, in the logs it showed: "The files belonging to this database system will be owned by user "postgres"."
-    # And "POSTGRES_USER" in docker-compose usually defaults or is set.
-    # Let's try to use pg_dumpall or pg_dump with the user.
-    # The snippet used: docker exec step-ca-db pg_dump -U step_ca_user step_ca_db
-    # I'll rely on that but maybe make it more robust by sourcing .env if avail.
     
-    # We will try a generic pg_dumpall which might be safer if we don't know the exact db name, 
-    # OR we assume the standard names.
-    # Let's use the one from the user request but safeguard it.
-    docker exec step-ca-db pg_dumpall -U step -f "/tmp/db_dump.sql" || {
-         echo "Dump failed with user 'step', trying 'postgres'..."
-         docker exec step-ca-db pg_dumpall -U postgres -f "/tmp/db_dump.sql"
-    }
+    # Use env vars if available, else fallback
+    DB_USER="${POSTGRES_USER:-step_ca_user}"
+    
+    # Dump using pg_dumpall for completeness (includes globals)
+    if docker exec step-ca-db pg_dumpall -U "$DB_USER" -f "/tmp/db_dump.sql"; then
+        echo "Database dump successful."
+    else
+        echo "Dump failed with user '$DB_USER'. Trying 'postgres'..."
+        docker exec step-ca-db pg_dumpall -U postgres -f "/tmp/db_dump.sql" || {
+            echo "Error: Database backup failed."
+            exit 1
+        }
+    fi
     
     # Copy from container to host backup dir
     docker cp step-ca-db:/tmp/db_dump.sql "$BACKUP_DIR/db_dump.sql"
