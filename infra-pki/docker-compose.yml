@@ -86,7 +86,7 @@ services:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
       - ../scripts/infra-pki/patch_ca_config.sh:/patch_ca_config.sh:ro
-    entrypoint: /bin/bash -c " echo '--- STARTING ENTRYPOINT ---'; if [ ! -f /home/step/config/ca.json ]; then echo 'Initializing PKI...'; /bin/bash /entrypoint.sh echo 'Init complete'; fi; echo 'Patching configuration...'; /bin/bash /patch_ca_config.sh; echo 'Starting Step-CA...'; exec /bin/step-ca --password-file=/home/step/secrets/password 2>&1 | tee -a /var/log/step-ca/system.log"
+    entrypoint: /bin/bash -c " echo '--- STARTING ENTRYPOINT ---'; if [ ! -f /home/step/config/ca.json ]; then echo 'Initializing PKI...'; /bin/bash /entrypoint.sh echo 'Init complete'; fi; echo 'Patching configuration...'; /bin/bash /patch_ca_config.sh; echo 'Starting Step-CA...'; exec /usr/local/bin/step-ca --password-file=/home/step/secrets/password 2>&1 | tee -a /var/log/step-ca/system.log"
     logging: *default-logging
     healthcheck:
       test: [ "CMD", "step", "ca", "health" ]
