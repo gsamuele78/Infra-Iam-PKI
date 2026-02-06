@@ -57,24 +57,26 @@ view_config() {
     read -p "Press Enter to return..."
 }
 
-# --- MODIFY CONFIGURATION (.env) ---
-modify_config() {
-    header
-    echo "Select variable to modify:"
-    echo "1. Toggle ACME Provisioner (ENABLE_ACME)"
-    echo "2. Toggle SSH Provisioner (ENABLE_SSH_PROVISIONER)"
-    echo "3. Toggle K8s Provisioner (ENABLE_K8S_PROVISIONER)"
-    echo "4. Return"
-    echo ""
-    read -p "Choice [1-4]: " choice
+# --- HELPER: EDIT ENV VAR ---
+edit_env_var() {
+    local var_name=$1
+    local current_val
+    current_val=$(grep "^$var_name=" "$ENV_FILE" | cut -d= -f2 || echo "")
     
-    case $choice in
-        1) toggle_env "ENABLE_ACME" ;;
-        2) toggle_env "ENABLE_SSH_PROVISIONER" ;;
-        3) toggle_env "ENABLE_K8S_PROVISIONER" ;;
-        4) return ;;
-        *) echo "Invalid choice." ;;
-    esac
+    echo "Current $var_name: $current_val"
+    read -p "Enter new value (leave empty to keep current): " new_val
+    
+    if [ -n "$new_val" ]; then
+        if grep -q "^$var_name=" "$ENV_FILE"; then
+            sed -i "s|^$var_name=.*|$var_name=$new_val|" "$ENV_FILE"
+        else
+            echo "$var_name=$new_val" >> "$ENV_FILE"
+        fi
+        echo "Updated $var_name to $new_val."
+    else
+        echo "No change made."
+    fi
+    sleep 1
 }
 
 toggle_env() {
@@ -97,6 +99,28 @@ toggle_env() {
     fi
     echo "Updated $var_name to $new_val."
     sleep 1
+}
+
+# --- MODIFY CONFIGURATION (.env) ---
+modify_config() {
+    header
+    echo "Select variable to modify:"
+    echo "1. Toggle ACME Provisioner (ENABLE_ACME)"
+    echo "2. Toggle SSH Provisioner (ENABLE_SSH_PROVISIONER)"
+    echo "3. Toggle K8s Provisioner (ENABLE_K8S_PROVISIONER)"
+    echo "4. Edit Allowed IPs (ALLOWED_IPS)"
+    echo "5. Return"
+    echo ""
+    read -p "Choice [1-5]: " choice
+    
+    case $choice in
+        1) toggle_env "ENABLE_ACME" ;;
+        2) toggle_env "ENABLE_SSH_PROVISIONER" ;;
+        3) toggle_env "ENABLE_K8S_PROVISIONER" ;;
+        4) edit_env_var "ALLOWED_IPS" ;;
+        5) return ;;
+        *) echo "Invalid choice." ;;
+    esac
 }
 
 # --- MANAGE SECRETS ---
@@ -139,6 +163,33 @@ manage_secrets() {
     sleep 1
 }
 
+# --- VIEW LOGS ---
+view_logs() {
+    header
+    echo "Select service logs to view:"
+    echo "1. Step-CA Service (step-ca)"
+    echo "2. Configurator (step-ca-configurator)"
+    echo "3. Caddy Proxy (caddy)"
+    echo "4. Return"
+    echo ""
+    read -p "Choice [1-4]: " choice
+    
+    local service=""
+    case $choice in
+        1) service="step-ca" ;;
+        2) service="step-ca-configurator" ;;
+        3) service="caddy" ;;
+        4) return ;;
+        *) echo "Invalid choice." ; sleep 1 ; return ;;
+    esac
+    
+    echo "Fetching logs for $service (last 50 lines)..."
+    cd "$WORKDIR" || return
+    docker compose logs --tail=50 "$service"
+    echo ""
+    read -p "Press Enter to return..."
+}
+
 # --- APPLY CHANGES ---
 apply_changes() {
     header
@@ -147,7 +198,7 @@ apply_changes() {
     read -p "Are you sure? (y/N) " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         echo "Restarting stack..."
-        cd "$WORKDIR"
+        cd "$WORKDIR" || return
         docker compose up -d --force-recreate
         echo -e "${GREEN}Stack restarted.${NC}"
     else
@@ -163,15 +214,22 @@ test_provisioners() {
     if ! docker ps | grep -q "step-ca"; then
         echo -e "${RED}step-ca container is not running.${NC}"
     else
-        if docker exec step-ca step ca health; then
+        if docker exec step-ca step ca health >/dev/null 2>&1; then
              echo -e "${GREEN}CA is Healthy.${NC}"
         else
              echo -e "${RED}CA Health Check Failed.${NC}"
+             docker exec step-ca step ca health || true
         fi
         
         echo ""
         echo "Current Provisioners:"
-        docker exec step-ca step ca provisioner list | grep "name"
+        if command -v jq >/dev/null; then
+             # Pretty print with jq if available
+             docker exec step-ca step ca provisioner list | jq '.' || echo "Failed to parse provisioner list"
+        else
+             # Fallback to raw output
+             docker exec step-ca step ca provisioner list
+        fi
     fi
     read -p "Press Enter to return..."
 }
@@ -183,19 +241,21 @@ main_menu() {
         echo "1. View Current Configuration"
         echo "2. Modify Environment Variables"
         echo "3. Manage Secrets"
-        echo "4. Test Provisioners/Health"
-        echo "5. APPLY CHANGES (Restart Stack)"
-        echo "6. Exit"
+        echo "4. View Service Logs"
+        echo "5. Test Provisioners/Health"
+        echo "6. APPLY CHANGES (Restart Stack)"
+        echo "7. Exit"
         echo "----------------------------------------"
-        read -p "Select action [1-6]: " choice
+        read -p "Select action [1-7]: " choice
         
         case $choice in
             1) view_config ;;
             2) modify_config ;;
             3) manage_secrets ;;
-            4) test_provisioners ;;
-            5) apply_changes ;;
-            6) exit 0 ;;
+            4) view_logs ;;
+            5) test_provisioners ;;
+            6) apply_changes ;;
+            7) exit 0 ;;
             *) echo "Invalid option." ; sleep 1 ;;
         esac
     done

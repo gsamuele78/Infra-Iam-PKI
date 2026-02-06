@@ -4,8 +4,9 @@ set -euo pipefail
 # Script to manage Trust of the Step-CA Root Certificate on the host
 # Supports: Debian/Ubuntu
 
-CA_CERT_PATH="../../infra-pki/step_data/certs/root_ca.crt"
-FINGERPRINT_PATH="../../infra-pki/step_data/fingerprint"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CA_CERT_PATH="$SCRIPT_DIR/../../infra-pki/step_data/certs/root_ca.crt"
+FINGERPRINT_PATH="$SCRIPT_DIR/../../infra-pki/step_data/fingerprint"
 SYSTEM_TRUST_DIR="/usr/local/share/ca-certificates"
 TRUSTED_CERT_NAME="internal-infra-root-ca.crt"
 
