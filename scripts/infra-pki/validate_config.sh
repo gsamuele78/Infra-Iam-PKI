@@ -17,6 +17,8 @@ NC='\033[0m'
 
 # Default mode
 MODE="all"
+ERRORS=0
+WARNINGS=0
 
 # Parse arguments
 if [ "$#" -ge 1 ]; then
