@@ -67,7 +67,7 @@ services:
       # Force init to use PostgreSQL instead of BadgerDB (default)
       # Ensure service name matches 'postgres' service reference (or container_name if in same network)
       # Using standard postgres connection string format
-      DOCKER_STEPCA_INIT_DATA_SOURCE: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      DOCKER_STEPCA_INIT_DB_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
       DOCKER_STEPCA_INIT_ACME: "true"
       DOCKER_STEPCA_INIT_REDIS: "false"
       DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "true"
@@ -129,6 +129,7 @@ services:
       context: ./caddy
     image: infra-pki-caddy:latest # Local build, keeping latest for local
     container_name: step-ca-proxy
+    user: "${PUID}:${PGID}"
     restart: unless-stopped
     ports:
       - "9000:9000"
