@@ -10,9 +10,9 @@ if [ ! -f "$CA_CONFIG" ]; then
     exit 0
 fi
 
-# Check if using BadgerDB (default)
-if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
-    echo "Patching ca.json to use PostgreSQL..."
+# Always patch to ensure environment variables are up to date
+if [ -f "$CA_CONFIG" ]; then
+    echo "Patching ca.json to enforce PostgreSQL usage..."
     
     # Verify jq is available
     if ! command -v jq &> /dev/null; then
@@ -51,6 +51,4 @@ if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
         rm -f "$TEMP_CONFIG"
         exit 1
     fi
-else
-    echo "Configuration already patched or not using BadgerDB."
 fi
