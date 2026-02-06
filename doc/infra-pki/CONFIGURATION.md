@@ -26,6 +26,20 @@ We utilize a split provisioner strategy for SSH Hosts aka "Best Practice":
     * Command: `step ca renew ...`
     * Auth: Uses the existing valid host certificate to sign the request.
 
+    * Auth: Uses the existing valid host certificate to sign the request.
+
+### 1.3 Dynamic Configuration Patching
+
+To support complex passwords and PostgreSQL connection requirements that are not natively handled by the `step-ca` 0.29.0 initialization:
+
+* **Script**: `scripts/infra-pki/patch_ca_config.sh`
+* **Execution**: Runs as a pre-start step in the `step-ca` container (entrypoint override).
+* **Function**:
+    1. Reads `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
+    2. **URL Encodes** credentials (fixes issues with special chars like `#`, `@`).
+    3. Constructs a DSN with `?sslmode=disable` (required for internal container networking).
+    4. Patches `ca.json` using `jq` to enforce `"type": "postgresql"`.
+
 ## 2. Proxy Configuration (Caddy)
 
 The `infra-pki/caddy/Caddyfile` defines the ingress rules.
@@ -35,6 +49,7 @@ The `infra-pki/caddy/Caddyfile` defines the ingress rules.
 We use the `layer4` directive to proxy TCP traffic.
 
 * **Why?** This allows `step-ca` to handle mutual TLS (mTLS) directly if needed, without the proxy terminating TLS. It keeps the proxy logic simple (IP filtering & forwarding).
+* **Health Check**: Since `layer4` does not expose an HTTP endpoint on the standard port, Docker health checks use `nc -z localhost 9000` to verify the TCP listener is active.
 
 ### 2.2 IP Allowlisting
 

@@ -8,12 +8,7 @@ until curl -sk https://step-ca:9000/health | grep -q "ok"; do
 done
 echo "Step-CA is up."
 
-# Force patch call immediately after CA is reachable but before logic proceeds
-# (Though CA needs restart to pick it up, this is a safety net)
-if [ -f "/scripts/patch_ca_config.sh" ]; then
-    echo "Running config patcher..."
-    /bin/bash /scripts/patch_ca_config.sh || echo "Patch failed or not needed."
-fi
+
 
 echo "Checking file visibility..."
 ls -la /home/step/certs/

@@ -10,12 +10,20 @@
     2. Check Caddy logs: `docker compose logs caddy`
     3. Verify your IP is in `ALLOWED_IPS` in `.env`.
 
+    4. Check Caddy logs: `docker compose logs caddy`
+    5. Verify your IP is in `ALLOWED_IPS` in `.env`.
+    6. **Health Check Failure**: If `deploy_pki.sh` reports `✗ CA health endpoint check failed`, ensure the **Docker Bridge Network** (usually `172.18.0.0/16`) is in `ALLOWED_IPS`. The script runs from the host but connects via the gateway.
+
 ### 1.2 Database Connection Errors
 
 * **Logs**: `step-ca` logs show `pq: password authentication failed` or `dial tcp: lookup postgres...`
 * **Fix**:
   * Ensure `POSTGRES_PASSWORD` matches in `.env`.
   * If you changed the password *after* initialization, you must delete `db_data` volume to reset the DB, or manually update the postgres user.
+
+  * Ensure `POSTGRES_PASSWORD` matches in `.env`.
+  * If you changed the password *after* initialization, you must delete `db_data` volume to reset the DB, or manually update the postgres user.
+  * **DSN Parsing Error**: If logs show `cannot parse postgresql://...`, it usually means special characters in the password. This is now automatically handled by `patch_ca_config.sh` which URL-encodes credentials. Ensure the patch script is running (check entrypoint logs).
 
 ### 1.3 "Badger" Database Warnings
 
