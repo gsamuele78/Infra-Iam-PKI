@@ -93,15 +93,17 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     echo "Configuring SSH Host Provisioners..."
     
     # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
+    # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
     if ! step ca provisioner list \
         --ca-url "$STEP_CA_URL" \
         --root /home/step/certs/root_ca.crt 2>/dev/null | grep -q "\"type\": \"SSHPOP\""; then
         echo "Adding SSH-POP provisioner (for host renewal)..."
-        echo "Adding SSH-POP provisioner (for host renewal)..."
+        set -x # Enable debug tracing
         step ca provisioner add "ssh-pop" --type "SSHPOP" \
             --token "$STEP_CA_TOKEN" \
             --ca-url "$STEP_CA_URL" \
             --root /home/step/certs/root_ca.crt
+        set +x # Disable debug tracing
     else
         echo "SSH-POP provisioner already exists."
     fi
