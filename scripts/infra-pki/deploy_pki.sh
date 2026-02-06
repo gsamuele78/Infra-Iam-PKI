@@ -115,7 +115,7 @@ fi
 echo ""
 echo -e "${BLUE}[Step 5/7] Building and pulling images...${NC}"
 cd "$PKI_DIR"
-docker compose build --pull
+docker compose build
 echo -e "${GREEN}✓ Images ready${NC}"
 
 # Step 6: Deploy
