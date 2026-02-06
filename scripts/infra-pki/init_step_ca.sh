@@ -53,12 +53,11 @@ echo "Using Admin Provisioner: '$ADMIN_PROVISIONER_NAME'"
 
 # Authenticate as admin (Generate Token unconditionally)
 echo "Generating Admin Token..."
-TOKEN=$(step ca token --admin \
-    --admin-subject="step" \
-    --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+TOKEN=$(step ca token "step" \
+    --provisioner="$ADMIN_PROVISIONER_NAME" \
     --password-file="$STEP_CA_PASSWORD_FILE" \
     --ca-url "$STEP_CA_URL" \
-    --root /home/step/certs/root_ca.crt bootstrap)
+    --root /home/step/certs/root_ca.crt)
 
 if [ -z "$TOKEN" ]; then
     echo "ERROR: Could not generate admin token"
