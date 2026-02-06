@@ -22,11 +22,12 @@ if grep -q '"type": "badgerv2"' "$CA_CONFIG"; then
 
     # Update configuration using jq
     # DSN format: postgresql://user:password@host:port/dbname?sslmode=disable
-    DSN="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    # Using PG* variables as defined in docker-compose environment
+    DSN="postgresql://${PGUSER}:${PGPASSWORD}@postgres:5432/${PGDATABASE}?sslmode=disable"
     
     # Apply jq filter
     jq --arg dsn "$DSN" \
-       --arg db "$POSTGRES_DB" \
+       --arg db "$PGDATABASE" \
        '.db = {
          "type": "postgresql",
          "dataSource": $dsn,
