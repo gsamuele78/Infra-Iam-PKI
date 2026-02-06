@@ -33,28 +33,36 @@ fi
 export STEPPATH=/home/step
 export STEP_CA_URL="https://step-ca:9000"
 
-# Authenticate as admin ONCE at the start
-echo "Authenticating as admin..."
-step ca admin list --ca-url "$STEP_CA_URL" \
-    --root /home/step/certs/root_ca.crt \
-    --admin-subject="step" \
-    --admin-provisioner="admin" \
-    --password-file="$STEP_CA_PASSWORD_FILE" > /dev/null 2>&1 || {
-    echo "Admin authentication failed. Attempting to bootstrap admin token..."
-    # Generate an admin token for this session
-    TOKEN=$(step ca token --admin \
-        --admin-subject="step" \
-        --admin-provisioner="admin" \
-        --password-file="$STEP_CA_PASSWORD_FILE" \
-        --ca-url "$STEP_CA_URL" \
-        --root /home/step/certs/root_ca.crt bootstrap 2>/dev/null || echo "")
-    
-    if [ -z "$TOKEN" ]; then
-        echo "ERROR: Could not generate admin token"
-        exit 1
+# Helper to detect Admin Provisioner Name
+get_admin_provisioner_name() {
+    if command -v jq &> /dev/null; then
+        jq -r '.authority.provisioners[] | select(.type=="JWK") | .name' /home/step/config/ca.json | head -n 1
+    else
+        echo "Admin JWK"
     fi
-    export STEP_CA_TOKEN="$TOKEN"
 }
+
+ADMIN_PROVISIONER_NAME=$(get_admin_provisioner_name)
+if [[ -z "$ADMIN_PROVISIONER_NAME" || "$ADMIN_PROVISIONER_NAME" == "null" ]]; then
+    ADMIN_PROVISIONER_NAME="Admin JWK"
+fi
+echo "Using Admin Provisioner: '$ADMIN_PROVISIONER_NAME'"
+
+# Authenticate as admin (Generate Token unconditionally)
+echo "Generating Admin Token..."
+TOKEN=$(step ca token --admin \
+    --admin-subject="step" \
+    --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+    --password-file="$STEP_CA_PASSWORD_FILE" \
+    --ca-url "$STEP_CA_URL" \
+    --root /home/step/certs/root_ca.crt bootstrap)
+
+if [ -z "$TOKEN" ]; then
+    echo "ERROR: Could not generate admin token"
+    exit 1
+fi
+export STEP_CA_TOKEN="$TOKEN"
+echo "Admin Token generated successfully."
 
 # Helper to add provisioner if missing
 add_provisioner() {
@@ -73,9 +81,7 @@ add_provisioner() {
     
     echo "Adding provisioner '$name' ($type)..."
     step ca provisioner add "$name" --type "$type" $args \
-        --admin-subject="step" \
-        --admin-provisioner="admin" \
-        --password-file="$STEP_CA_PASSWORD_FILE" \
+        --token "$STEP_CA_TOKEN" \
         --ca-url "$STEP_CA_URL" \
         --root /home/step/certs/root_ca.crt
 }
@@ -89,10 +95,9 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
         --ca-url "$STEP_CA_URL" \
         --root /home/step/certs/root_ca.crt 2>/dev/null | grep -q "\"type\": \"SSHPOP\""; then
         echo "Adding SSH-POP provisioner (for host renewal)..."
+        echo "Adding SSH-POP provisioner (for host renewal)..."
         step ca provisioner add "ssh-pop" --type "SSHPOP" \
-            --admin-subject="step" \
-            --admin-provisioner="admin" \
-            --password-file="$STEP_CA_PASSWORD_FILE" \
+            --token "$STEP_CA_TOKEN" \
             --ca-url "$STEP_CA_URL" \
             --root /home/step/certs/root_ca.crt
     else
@@ -124,9 +129,7 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
             echo "Adding 'ssh-host-jwk' provisioner..."
             step ca provisioner add "ssh-host-jwk" --type "JWK" \
                 --public-key /home/step/certs/ssh_host_jwk.pub \
-                --admin-subject="step" \
-                --admin-provisioner="admin" \
-                --password-file="$STEP_CA_PASSWORD_FILE" \
+                --token "$STEP_CA_TOKEN" \
                 --ca-url "$STEP_CA_URL" \
                 --root /home/step/certs/root_ca.crt
                 
@@ -155,9 +158,7 @@ if [ "$ENABLE_K8S_PROVISIONER" = "true" ]; then
             echo "Adding K8sSA provisioner..."
             step ca provisioner add "k8s-sa" --type "K8sSA" \
                 --public-key "$K8S_KEY_FILE" \
-                --admin-subject="step" \
-                --admin-provisioner="admin" \
-                --password-file="$STEP_CA_PASSWORD_FILE" \
+                --token "$STEP_CA_TOKEN" \
                 --ca-url "$STEP_CA_URL" \
                 --root /home/step/certs/root_ca.crt
         else
