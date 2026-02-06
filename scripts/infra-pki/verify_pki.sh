@@ -81,7 +81,19 @@ else
 fi
 
 # Check External Health (Through Caddy)
-CA_URL=$(grep "^STEP_CA_URL=" .env | cut -d= -f2 || echo "https://localhost")
+# Priority: 1. STEP_CA_URL (if set), 2. DOMAIN_CA (if set, +9000), 3. Localhost:9000
+STEP_CA_URL=$(grep "^STEP_CA_URL=" .env | cut -d= -f2 || true)
+DOMAIN_CA=$(grep "^DOMAIN_CA=" .env | cut -d= -f2 || true)
+
+if [ -n "$STEP_CA_URL" ]; then
+    CA_URL="$STEP_CA_URL"
+elif [ -n "$DOMAIN_CA" ]; then
+    CA_URL="https://${DOMAIN_CA}:9000"
+else
+    CA_URL="https://localhost:9000"
+fi
+echo -e "  - Target CA URL: ${YELLOW}$CA_URL${NC}"
+
 DOMAIN=$(echo "$CA_URL" | awk -F/ '{print $3}' | cut -d: -f1)
 
 # 1. TCP Check
