@@ -62,7 +62,7 @@ services:
         condition: service_healthy
     # Ports removed - accessed via Caddy usage
     environment:
-      DOCKER_STEPCA_INIT_NAME: "Internal Root CA"
+      DOCKER_STEPCA_INIT_NAME: "${PKI_NAME:-Internal Root CA}"
       DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA},step-ca"
       # Force init to use PostgreSQL instead of BadgerDB (default)
       # Ensure service name matches 'postgres' service reference (or container_name if in same network)
