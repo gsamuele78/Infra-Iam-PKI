@@ -83,7 +83,9 @@ add_provisioner() {
     
     echo "Adding provisioner '$name' ($type)..."
     step ca provisioner add "$name" --type "$type" $args \
-        --token "$STEP_CA_TOKEN" \
+        --admin-subject="step" \
+        --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+        --admin-password-file="$STEP_CA_PASSWORD_FILE" \
         --ca-url "$STEP_CA_URL" \
         --root /home/step/certs/root_ca.crt
 }
@@ -93,14 +95,15 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
     echo "Configuring SSH Host Provisioners..."
     
     # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
-    # A. SSH-POP (Proof of Possession) - Essential for RENEWAL of host certs
     if ! step ca provisioner list \
         --ca-url "$STEP_CA_URL" \
         --root /home/step/certs/root_ca.crt 2>/dev/null | grep -q "\"type\": \"SSHPOP\""; then
         echo "Adding SSH-POP provisioner (for host renewal)..."
         set -x # Enable debug tracing
         step ca provisioner add "ssh-pop" --type "SSHPOP" \
-            --token "$STEP_CA_TOKEN" \
+            --admin-subject="step" \
+            --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+            --admin-password-file="$STEP_CA_PASSWORD_FILE" \
             --ca-url "$STEP_CA_URL" \
             --root /home/step/certs/root_ca.crt
         set +x # Disable debug tracing
@@ -133,7 +136,9 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
             echo "Adding 'ssh-host-jwk' provisioner..."
             step ca provisioner add "ssh-host-jwk" --type "JWK" \
                 --public-key /home/step/certs/ssh_host_jwk.pub \
-                --token "$STEP_CA_TOKEN" \
+                --admin-subject="step" \
+                --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+                --admin-password-file="$STEP_CA_PASSWORD_FILE" \
                 --ca-url "$STEP_CA_URL" \
                 --root /home/step/certs/root_ca.crt
                 
@@ -162,7 +167,9 @@ if [ "$ENABLE_K8S_PROVISIONER" = "true" ]; then
             echo "Adding K8sSA provisioner..."
             step ca provisioner add "k8s-sa" --type "K8sSA" \
                 --public-key "$K8S_KEY_FILE" \
-                --token "$STEP_CA_TOKEN" \
+                --admin-subject="step" \
+                --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
+                --admin-password-file="$STEP_CA_PASSWORD_FILE" \
                 --ca-url "$STEP_CA_URL" \
                 --root /home/step/certs/root_ca.crt
         else
