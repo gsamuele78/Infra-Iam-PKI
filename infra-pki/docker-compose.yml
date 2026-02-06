@@ -64,6 +64,8 @@ services:
     environment:
       DOCKER_STEPCA_INIT_NAME: "Internal Root CA"
       DOCKER_STEPCA_INIT_DNS_NAMES: "localhost,${DOMAIN_CA},step-ca"
+      # Force init to use PostgreSQL instead of BadgerDB (default)
+      DOCKER_STEPCA_INIT_DATA_SOURCE: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
       DOCKER_STEPCA_INIT_ACME: "true"
       DOCKER_STEPCA_INIT_REDIS: "false"
       DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "true"
