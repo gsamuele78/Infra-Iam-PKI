@@ -361,7 +361,13 @@ edit_config() {
 
 uninstall() {
     echo -e "${RED}>>> Uninstalling...${NC}"
-    
+    echo -e "${RED}WARNING: This will remove SSH certificates, auto-renewal timers, and system trust config.${NC}"
+    read -p "Are you sure you want to proceed? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Uninstall cancelled."
+        return 0
+    fi
+
     # Stop and disable timer
     systemctl disable --now step-ssh-renew.timer 2>/dev/null || true
     
@@ -386,6 +392,13 @@ uninstall() {
     
     # Remove step directory
     rm -rf "$STEP_PATH"
+
+    # Option to remove .env
+    read -p "Remove configuration file ($ENV_FILE)? [y/N]: " clean_env
+    if [[ "$clean_env" =~ ^[Yy]$ ]]; then
+        rm -f "$ENV_FILE"
+        echo -e "${GREEN}✓ configuration file removed.${NC}"
+    fi
     
     echo -e "${GREEN}✓ Uninstalled${NC}"
     echo "SSH daemon config backed up to /etc/ssh/sshd_config.backup"
@@ -413,7 +426,7 @@ show_menu() {
         echo "2. Bootstrap Trust Only (Root CA)"
         echo "3. Enroll as SSH Host (Full Setup)"
         echo "4. Verify Certificate & Status"
-        echo "5. Uninstall"
+        echo "5. Cleanup / Uninstall (Remove Certificate & Trust)"
         echo "6. Exit"
         echo "--------------------------------------"
         read -p "Select [1-6]: " choice
