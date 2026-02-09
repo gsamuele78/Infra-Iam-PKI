@@ -44,7 +44,12 @@ CA_URL="https://localhost:9000" # Default internal URL, maybe need public facing
 # Try to get public URL if possible, otherwise default to configured CA_DNS
 DOMAIN_CA=$(get_config "DOMAIN_CA" "none")
 if [ -n "$DOMAIN_CA" ]; then
-    CA_URL="https://$DOMAIN_CA"
+    # Ensure port 9000 is included for the CA URL
+    if [[ "$DOMAIN_CA" == *":"* ]]; then
+        CA_URL="https://$DOMAIN_CA"
+    else
+        CA_URL="https://$DOMAIN_CA:9000"
+    fi
 fi
 
 # Get CA Fingerprint
@@ -132,6 +137,7 @@ TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
     --key /home/step/secrets/ssh_host_jwk_key \
     --password-file "$CONTAINER_PW_FILE" \
+    --ca-url "$CA_URL" \
     --ssh \
     --host)
 
