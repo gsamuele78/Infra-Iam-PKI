@@ -315,20 +315,29 @@ verify_cert() {
         # Download the SSH Host CA Key
         TEMP_KEY=$(mktemp)
         if curl -s -f "$SSH_KEY_URL" -o "$TEMP_KEY"; then
-             EXPECTED_FP=$(ssh-keygen -l -f "$TEMP_KEY" | awk '{print $2}' | cut -d: -f2-)
+             # Get Expected Fingerprint (SHA256:...)
+             EXPECTED_FP=$(ssh-keygen -l -f "$TEMP_KEY" | awk '{print $2}')
              
-             # Extract fingerprint from certificate
-             ACTUAL_FP=$(ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:" | awk '{print $NF}' | cut -d: -f2- || echo "not-found")
+             # Extract Actual Fingerprint from Certificate (signing CA)
+             # ssh-keygen -L output format: "Signing CA: ECDSA SHA256:..."
+             # We want to match the "SHA256:..." part
+             ACTUAL_LINE=$(ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:")
              
-             if [ "$ACTUAL_FP" != "not-found" ] && [ -n "$ACTUAL_FP" ]; then
-                if [[ "$ACTUAL_FP" == "$EXPECTED_FP"* ]] || [[ "$EXPECTED_FP" == "$ACTUAL_FP"* ]]; then
-                    CA_MATCH="${GREEN}MATCH${NC} (Verified by $SSH_KEY_URL)"
-                fi
+             if [[ "$ACTUAL_LINE" == *"$EXPECTED_FP"* ]]; then
+                 CA_MATCH="${GREEN}MATCH${NC} (Verified by $SSH_KEY_URL)"
+             else
+                 # Debug info if needed, or just keep mismatch
+                 # CA_MATCH="${RED}MISMATCH${NC} (Expected $EXPECTED_FP)"
+                 :
              fi
         else
              # Fallback to local check if we are on the CA server or have the file
-             if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
-                  CA_MATCH="${YELLOW}UNKNOWN${NC} (Could not fetch SSH CA Key)"
+             if [ -f "$STEP_PATH/certs/ssh_host_ca_key.pub" ]; then
+                   LOCAL_FP=$(ssh-keygen -l -f "$STEP_PATH/certs/ssh_host_ca_key.pub" | awk '{print $2}')
+                   ACTUAL_LINE=$(ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:")
+                   if [[ "$ACTUAL_LINE" == *"$LOCAL_FP"* ]]; then
+                        CA_MATCH="${GREEN}MATCH${NC} (Verified by local file)"
+                   fi
              fi
         fi
         rm -f "$TEMP_KEY"
