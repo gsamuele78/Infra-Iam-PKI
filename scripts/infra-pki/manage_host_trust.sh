@@ -70,22 +70,35 @@ show_menu() {
         1) check_root_user; install_trust ;;
         2) check_root_user; uninstall_trust ;;
         3) 
-            if [ -f "$FINGERPRINT_PATH" ]; then
-                echo "Fingerprint: $(cat "$FINGERPRINT_PATH")"
-            else
-                echo "Fingerprint file not found."
-            fi
+            INSTALLED_CERT="$SYSTEM_TRUST_DIR/$TRUSTED_CERT_NAME"
+            echo ""
+            echo "--- Installed Certificate (System Trust Store) ---"
             
-            if [ -f "$CA_CERT_PATH" ]; then
+            if [ -f "$INSTALLED_CERT" ]; then
+                echo "Status: INSTALLED"
+                echo "Path:   $INSTALLED_CERT"
                 echo ""
-                echo "--- Certificate Details ---"
                 if command -v openssl &>/dev/null; then
-                    openssl x509 -in "$CA_CERT_PATH" -noout -subject -issuer -dates
-                    echo "---------------------------"
+                    # Get Cert Details
+                    openssl x509 -in "$INSTALLED_CERT" -noout -subject -issuer -dates
+                    echo "Fingerprint (SHA256):"
+                    openssl x509 -in "$INSTALLED_CERT" -noout -fingerprint -sha256 | cut -d= -f2
                 else
                     echo "OpenSSL not found. Cannot display details."
                 fi
+            else
+                echo "Status: NOT INSTALLED"
+                echo "Expected Path: $INSTALLED_CERT"
             fi
+            
+            echo ""
+            echo "--- Source Certificate (Step-CA) ---"
+            if [ -f "$FINGERPRINT_PATH" ]; then
+                echo "Expected Fingerprint: $(cat "$FINGERPRINT_PATH")"
+            else
+                 echo "Fingerprint file not found (step-ca might not be ready)."
+            fi
+            echo "------------------------------------"
             ;;
         4) exit 0 ;;
         *) echo "Invalid option." ;;

@@ -114,11 +114,17 @@ PW_FILE=$(mktemp)
 chmod 600 "$PW_FILE"
 printf "%s" "$SSH_PASSWORD" > "$PW_FILE"
 
+# Get PUID/PGID for correct ownership
+PUID=$(get_config "PUID" "none")
+PGID=$(get_config "PGID" "none")
+PUID=${PUID:-1000}
+PGID=${PGID:-1000}
+
 # Copy password to container to avoid stdin/TTY issues
 # Use a unique temp filename to avoid collisions
 CONTAINER_PW_FILE="/home/step/temp_token_pw_$(date +%s)"
 docker cp "$PW_FILE" "step-ca:$CONTAINER_PW_FILE"
-docker exec step-ca chown step:step "$CONTAINER_PW_FILE"
+docker exec -u 0 step-ca chown ${PUID}:${PGID} "$CONTAINER_PW_FILE"
 
 # Execute step ca token using the file inside the container
 TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
