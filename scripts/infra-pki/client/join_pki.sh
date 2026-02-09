@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# join_pki.sh
+# join_pki.sh - CORRECTED VERSION
 # Automates joining a Linux host to the Smallstep PKI.
 # Features: .env support, Smart Menu, Verification, Auto-Renewal.
 
@@ -33,8 +33,6 @@ check_root() {
 load_env() {
     if [ -f "$ENV_FILE" ]; then
         echo "Loading config from $ENV_FILE..."
-        # Source checks to prevent eval injection not strictly needed if file is trusted, 
-        # but manual parsing is safer for simple vars.
         CA_URL=$(grep "^CA_URL=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "$CA_URL")
         FINGERPRINT=$(grep "^FINGERPRINT=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "$FINGERPRINT")
         TOKEN=$(grep "^TOKEN=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "$TOKEN")
@@ -98,7 +96,7 @@ install_dependencies() {
         rm -rf /tmp/step*
         echo -e "${GREEN}step CLI installed.${NC}"
     else
-        echo -e "${GREEN}step CLI is present.${NC}"
+        echo -e "${GREEN}step CLI is present: $(step version | head -1)${NC}"
     fi
 }
 
@@ -111,9 +109,37 @@ bootstrap_trust() {
         return 1
     fi
     
-    step ca bootstrap --ca-url "$CA_URL" --fingerprint "$FINGERPRINT" --force
-    step certificate install "$STEP_PATH/certs/root_ca.crt"
-    echo -e "${GREEN}Root CA installed to system store.${NC}"
+    # Validate CA_URL has port
+    if ! echo "$CA_URL" | grep -q ":[0-9]\+"; then
+        echo -e "${YELLOW}⚠️  CA_URL missing port. Adding :9000${NC}"
+        CA_URL="${CA_URL}:9000"
+        save_env
+    fi
+    
+    echo "Connecting to: $CA_URL"
+    echo "Fingerprint: $FINGERPRINT"
+    
+    # Bootstrap (this downloads and trusts the root CA)
+    if step ca bootstrap --ca-url "$CA_URL" --fingerprint "$FINGERPRINT" --force; then
+        echo -e "${GREEN}✓ Bootstrapped successfully${NC}"
+    else
+        echo -e "${RED}✗ Bootstrap failed${NC}"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  1. Check CA_URL is accessible: curl -k $CA_URL/health"
+        echo "  2. Verify fingerprint matches: cat /path/to/step_data/fingerprint"
+        echo "  3. Check firewall allows access to port 9000"
+        return 1
+    fi
+    
+    # Install root CA to system trust store
+    if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
+        step certificate install "$STEP_PATH/certs/root_ca.crt"
+        echo -e "${GREEN}✓ Root CA installed to system store${NC}"
+    else
+        echo -e "${RED}✗ Root CA file not found${NC}"
+        return 1
+    fi
 }
 
 enroll_ssh() {
@@ -121,27 +147,116 @@ enroll_ssh() {
     
     if [ -z "$TOKEN" ]; then
         echo -e "${RED}Error: Enrollment TOKEN required.${NC}"
+        echo "Generate a token on the CA server using: ./generate_token.sh"
         return 1
     fi
     
-    # 1. Bootstrap first
-    bootstrap_trust || return 1
+    # 1. Bootstrap first (install root CA)
+    if ! bootstrap_trust; then
+        echo -e "${RED}✗ Bootstrap failed, cannot continue${NC}"
+        return 1
+    fi
     
-    # 2. Configure SSH
-    echo "Requesting Host Certificate..."
-    step ssh config --host --token "$TOKEN" --force
-    echo -e "${GREEN}SSH Configured.${NC}"
+    # 2. Get hostname
+    HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+    echo "Hostname: $HOSTNAME"
     
-    # 3. Setup Renewal
+    # 3. Request SSH host certificate using the token
+    echo ""
+    echo "Requesting SSH host certificate..."
+    
+    # Create key if it doesn't exist
+    if [ ! -f /etc/ssh/ssh_host_ecdsa_key ]; then
+        echo "Generating ECDSA host key..."
+        ssh-keygen -t ecdsa -f /etc/ssh/ssh_host_ecdsa_key -N ""
+    fi
+    
+    # Request certificate
+    # The correct command is 'step ssh certificate' not 'step ssh config'
+    if step ssh certificate \
+        "$HOSTNAME" \
+        /etc/ssh/ssh_host_ecdsa_key-cert.pub \
+        --host \
+        --token "$TOKEN" \
+        --principal "$HOSTNAME" \
+        --ca-url "$CA_URL" \
+        --root "$STEP_PATH/certs/root_ca.crt" \
+        --not-after 168h; then
+        
+        echo -e "${GREEN}✓ SSH certificate obtained${NC}"
+    else
+        echo -e "${RED}✗ Failed to get SSH certificate${NC}"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  1. Check token is valid (not expired)"
+        echo "  2. Verify CA is accessible"
+        echo "  3. Check hostname matches token: $HOSTNAME"
+        return 1
+    fi
+    
+    # 4. Configure SSH to use the certificate
+    echo ""
+    echo "Configuring SSH daemon..."
+    configure_sshd
+    
+    # 5. Setup auto-renewal
     if [ "$ENABLE_RENEWAL" == "true" ]; then
         setup_renewal
+    fi
+    
+    # 6. Restart SSH
+    echo ""
+    echo "Restarting SSH service..."
+    if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
+        echo -e "${GREEN}✓ SSH restarted${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Could not restart SSH automatically${NC}"
+        echo "Please restart manually: systemctl restart sshd"
     fi
     
     verify_cert
 }
 
+configure_sshd() {
+    # Add certificate configuration to sshd_config if not present
+    SSHD_CONFIG="/etc/ssh/sshd_config"
+    
+    if ! grep -q "HostCertificate /etc/ssh/ssh_host_ecdsa_key-cert.pub" "$SSHD_CONFIG"; then
+        echo ""
+        echo "Adding certificate configuration to $SSHD_CONFIG..."
+        
+        # Backup sshd_config
+        cp "$SSHD_CONFIG" "${SSHD_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+        
+        # Add certificate line
+        cat >> "$SSHD_CONFIG" <<EOF
+
+# Step-CA SSH Host Certificate
+HostCertificate /etc/ssh/ssh_host_ecdsa_key-cert.pub
+HostKey /etc/ssh/ssh_host_ecdsa_key
+EOF
+        
+        echo -e "${GREEN}✓ SSH configuration updated${NC}"
+    else
+        echo -e "${GREEN}✓ SSH already configured for certificates${NC}"
+    fi
+    
+    # Also configure TrustedUserCAKeys if available
+    if [ -f "$STEP_PATH/certs/ssh_user_key.pub" ]; then
+        if ! grep -q "TrustedUserCAKeys" "$SSHD_CONFIG"; then
+            cat >> "$SSHD_CONFIG" <<EOF
+TrustedUserCAKeys $STEP_PATH/certs/ssh_user_key.pub
+EOF
+            echo -e "${GREEN}✓ User CA configured${NC}"
+        fi
+    fi
+}
+
 setup_renewal() {
-    echo "Configuring Systemd Auto-Renewal..."
+    echo ""
+    echo "Configuring automatic renewal..."
+    
+    # Create renewal service
     cat <<EOF > "$SYSTEMD_DIR/step-ssh-renew.service"
 [Unit]
 Description=Renew Step SSH Host Certificate
@@ -151,13 +266,17 @@ After=network-online.target
 Type=oneshot
 User=root
 Environment=STEPPATH=$STEP_PATH
-ExecStart=/usr/local/bin/step ssh renew --force $STEP_PATH/ssh/ssh_host_ecdsa_key-cert.pub $STEP_PATH/ssh/ssh_host_ecdsa_key
-ExecStartPost=/usr/sbin/service ssh restart
+ExecStart=/usr/local/bin/step ssh renew /etc/ssh/ssh_host_ecdsa_key-cert.pub /etc/ssh/ssh_host_ecdsa_key --force --ca-url $CA_URL --root $STEP_PATH/certs/root_ca.crt
+ExecStartPost=/bin/systemctl reload-or-restart sshd
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
+    # Create renewal timer (weekly)
     cat <<EOF > "$SYSTEMD_DIR/step-ssh-renew.timer"
 [Unit]
-Description=Timer for Step SSH Host Certificate Renewal
+Description=Weekly renewal of Step SSH Host Certificate
 
 [Timer]
 OnCalendar=weekly
@@ -168,29 +287,57 @@ WantedBy=timers.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable --now step-ssh-renew.timer
-    echo -e "${GREEN}Auto-renewal enabled.${NC}"
+    systemctl enable step-ssh-renew.timer
+    systemctl start step-ssh-renew.timer
+    
+    echo -e "${GREEN}✓ Auto-renewal enabled (weekly)${NC}"
 }
 
 verify_cert() {
-    echo -e "${BLUE}>>> Verifying Certificate...${NC}"
+    echo ""
+    echo -e "${BLUE}>>> Verification...${NC}"
+    
     CERT_FILE="/etc/ssh/ssh_host_ecdsa_key-cert.pub"
     
     if [ -f "$CERT_FILE" ]; then
         echo -e "Certificate File: ${GREEN}FOUND${NC} ($CERT_FILE)"
         echo "---------------------------------------------------"
-        step ssh inspect "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Issuer:"
+        
+        # Display certificate details
+        if command -v step &>/dev/null; then
+            step ssh inspect "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:" || \
+                ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:"
+        else
+            ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:"
+        fi
+        
         echo "---------------------------------------------------"
     else
-        echo -e "${RED}Certificate file not found at $CERT_FILE${NC}"
+        echo -e "${RED}✗ Certificate file not found at $CERT_FILE${NC}"
+        return 1
     fi
     
-    echo -n "Systemd Timer Status: "
-    if systemctl is-active --quiet step-ssh-renew.timer; then
+    # Check renewal timer
+    echo ""
+    echo -n "Auto-renewal timer: "
+    if systemctl is-active --quiet step-ssh-renew.timer 2>/dev/null; then
         echo -e "${GREEN}ACTIVE${NC}"
+        echo "Next run: $(systemctl status step-ssh-renew.timer | grep Trigger | awk '{print $2, $3, $4}')"
     else
-        echo -e "${RED}INACTIVE${NC}"
+        echo -e "${YELLOW}INACTIVE${NC}"
     fi
+    
+    # Check SSH configuration
+    echo ""
+    echo -n "SSH daemon config: "
+    if grep -q "HostCertificate /etc/ssh/ssh_host_ecdsa_key-cert.pub" /etc/ssh/sshd_config; then
+        echo -e "${GREEN}CONFIGURED${NC}"
+    else
+        echo -e "${RED}NOT CONFIGURED${NC}"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}✅ SSH Host enrollment complete!${NC}"
 }
 
 edit_config() {
@@ -212,15 +359,35 @@ edit_config() {
 
 uninstall() {
     echo -e "${RED}>>> Uninstalling...${NC}"
+    
+    # Stop and disable timer
     systemctl disable --now step-ssh-renew.timer 2>/dev/null || true
+    
+    # Remove systemd files
     rm -f "$SYSTEMD_DIR/step-ssh-renew.service" "$SYSTEMD_DIR/step-ssh-renew.timer"
     systemctl daemon-reload
     
-    if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
-        step certificate uninstall "$STEP_PATH/certs/root_ca.crt" || true
+    # Remove certificate
+    rm -f /etc/ssh/ssh_host_ecdsa_key-cert.pub
+    
+    # Remove SSH config lines
+    if [ -f /etc/ssh/sshd_config ]; then
+        cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+        sed -i '/# Step-CA SSH Host Certificate/,/HostKey \/etc\/ssh\/ssh_host_ecdsa_key/d' /etc/ssh/sshd_config
+        sed -i '/TrustedUserCAKeys.*step/d' /etc/ssh/sshd_config
     fi
+    
+    # Uninstall root CA
+    if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
+        step certificate uninstall "$STEP_PATH/certs/root_ca.crt" 2>/dev/null || true
+    fi
+    
+    # Remove step directory
     rm -rf "$STEP_PATH"
-    echo -e "${GREEN}Uninstalled. (Check /etc/ssh/sshd_config manually for leftovers).${NC}"
+    
+    echo -e "${GREEN}✓ Uninstalled${NC}"
+    echo "SSH daemon config backed up to /etc/ssh/sshd_config.backup"
+    echo "Please restart SSH: systemctl restart sshd"
 }
 
 # --- MAIN MENU ---
@@ -271,9 +438,19 @@ if [ "$#" -gt 0 ]; then
         ssh-host) enroll_ssh ;;
         trust) bootstrap_trust ;;
         verify) verify_cert ;;
-        driver) install_dependencies ;; 
+        config) edit_config ;;
+        deps) install_dependencies ;; 
         uninstall) uninstall ;;
-        *) echo "Usage: $0 {ssh-host|trust|verify|uninstall}" ;;
+        *) 
+            echo "Usage: $0 {ssh-host|trust|verify|config|uninstall}"
+            echo ""
+            echo "Commands:"
+            echo "  ssh-host   - Full SSH host enrollment"
+            echo "  trust      - Bootstrap trust only (install root CA)"
+            echo "  verify     - Verify certificate and configuration"
+            echo "  config     - Edit configuration"
+            echo "  uninstall  - Remove all Step-CA configuration"
+            ;;
     esac
 else
     show_menu
