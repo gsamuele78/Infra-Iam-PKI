@@ -124,8 +124,8 @@ echo -e "${GREEN}✓ Directories created${NC}"
 # Step 4: Set permissions
 echo ""
 echo -e "${BLUE}[Step 4/7] Setting permissions...${NC}"
-PUID=$(grep "^PUID=" "$PKI_DIR/.env" | cut -d= -f2)
-PGID=$(grep "^PGID=" "$PKI_DIR/.env" | cut -d= -f2)
+PUID=$(grep "^PUID=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
+PGID=$(grep "^PGID=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
 
 if [ -n "$PUID" ] && [ -n "$PGID" ]; then
     chown -R "$PUID:$PGID" "$PKI_DIR"/{step_data,db_data,logs} 2>/dev/null || \
