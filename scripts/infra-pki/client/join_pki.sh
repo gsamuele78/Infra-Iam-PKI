@@ -298,6 +298,7 @@ EOF
 verify_cert() {
     echo ""
     echo -e "${BLUE}>>> Verification...${NC}"
+    CERT_FILE="/etc/ssh/ssh_host_ecdsa_key-cert.pub"
     
     if [ -f "$CERT_FILE" ]; then
         echo -e "Certificate File: ${GREEN}FOUND${NC}"
