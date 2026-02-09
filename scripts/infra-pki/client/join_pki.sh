@@ -176,12 +176,14 @@ enroll_ssh() {
     if step ssh certificate \
         "$HOSTNAME" \
         /etc/ssh/ssh_host_ecdsa_key-cert.pub \
+        /etc/ssh/ssh_host_ecdsa_key \
         --host \
         --token "$TOKEN" \
         --principal "$HOSTNAME" \
         --ca-url "$CA_URL" \
         --root "$STEP_PATH/certs/root_ca.crt" \
-        --not-after 168h; then
+        --not-after 168h \
+        --no-password --insecure; then
         
         echo -e "${GREEN}✓ SSH certificate obtained${NC}"
     else
