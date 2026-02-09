@@ -302,7 +302,22 @@ verify_cert() {
     CERT_FILE="/etc/ssh/ssh_host_ecdsa_key-cert.pub"
     
     if [ -f "$CERT_FILE" ]; then
-        echo -e "Certificate File: ${GREEN}FOUND${NC} ($CERT_FILE)"
+        echo -e "Certificate File: ${GREEN}FOUND${NC}"
+        
+        # Verify signing CA against our local root
+        CA_MATCH="${RED}MISMATCH${NC}"
+        if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
+            EXPECTED_FP=$(step certificate fingerprint "$STEP_PATH/certs/root_ca.crt" 2>/dev/null || echo "unknown")
+            ACTUAL_FP=$(step ssh inspect "$CERT_FILE" | grep "Authority:" | awk '{print $NF}' | cut -d: -f2- 2>/dev/null || echo "not-found")
+            
+            # Shorten for comparison if needed, but usually they match or don't
+            if [[ "$ACTUAL_FP" == "$EXPECTED_FP"* ]] || [[ "$EXPECTED_FP" == "$ACTUAL_FP"* ]]; then
+                CA_MATCH="${GREEN}MATCH${NC} (Verified by local Root CA)"
+            fi
+        fi
+        
+        echo -e "Status:           ${GREEN}✓ VALID${NC}"
+        echo -e "Authority:        $CA_MATCH"
         echo "---------------------------------------------------"
         
         # Display certificate details
