@@ -61,7 +61,7 @@ view_config() {
 edit_env_var() {
     local var_name=$1
     local current_val
-    current_val=$(grep "^$var_name=" "$ENV_FILE" | cut -d= -f2 || echo "")
+    current_val=$(grep "^$var_name=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "")
     
     echo "Current $var_name: $current_val"
     read -p "Enter new value (leave empty to keep current): " new_val
@@ -82,7 +82,7 @@ edit_env_var() {
 toggle_env() {
     local var_name=$1
     local current_val
-    current_val=$(grep "^$var_name=" "$ENV_FILE" | cut -d= -f2 || echo "unknown")
+    current_val=$(grep "^$var_name=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "unknown")
     
     echo "Current $var_name: $current_val"
     read -p "Set to true/false? " new_val

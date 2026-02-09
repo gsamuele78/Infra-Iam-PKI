@@ -188,7 +188,7 @@ fi
 echo ""
 echo "Checking network configuration..."
 if grep -q "ALLOWED_IPS=" "$PKI_DIR/.env"; then
-    ALLOWED_IPS=$(grep "^ALLOWED_IPS=" "$PKI_DIR/.env" | cut -d= -f2)
+    ALLOWED_IPS=$(grep "^ALLOWED_IPS=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
     if [ -z "$ALLOWED_IPS" ]; then
         error "ALLOWED_IPS is empty"
     else

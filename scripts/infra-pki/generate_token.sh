@@ -26,7 +26,8 @@ get_config() {
         val=$(cat "$SECRETS_DIR/$secret_file")
     # 2. Try Env File
     elif [ -f "$ENV_FILE" ]; then
-        val=$(grep "^$env_var=" "$ENV_FILE" | cut -d= -f2 || true)
+        # Handle quoted values by stripping surrounding quotes
+        val=$(grep "^$env_var=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
     fi
     echo "$val"
 }
