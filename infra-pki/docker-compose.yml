@@ -164,7 +164,8 @@ services:
     logging: *default-logging
 
   watchtower:
-    image: nickfedor/watchtower:latest
+    image: nickfedor/watchtower:1.7.1
+    container_name: pki-watchtower
     environment:
       - DOCKER_API_VERSION=1.44
     volumes:

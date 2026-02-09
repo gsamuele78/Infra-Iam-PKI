@@ -139,7 +139,8 @@ TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
     --password-file "$CONTAINER_PW_FILE" \
     --ca-url "$CA_URL" \
     --ssh \
-    --host)
+    --host \
+    --principal "$HOSTNAME")
 
 # Cleanup inside container
 docker exec step-ca rm -f "$CONTAINER_PW_FILE"

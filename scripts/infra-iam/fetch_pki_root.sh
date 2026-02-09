@@ -5,19 +5,25 @@ set -euo pipefail
 # Fetches the Root CA certificate from a remote Step-CA server.
 # Optimized for running inside 'step-cli' container (Native, no Docker wrap).
 
-DEFAULT_OUTPUT="/certs/root_ca.crt"
+# Resolve Project Root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IAM_DIR="$(cd "$SCRIPT_DIR/../../infra-iam" && pwd)"
+
+# Default Output
+DEFAULT_OUTPUT="$IAM_DIR/certs/root_ca.crt"
+# Use absolute path if provided, otherwise default. Inside container /certs/root_ca.crt is usually passed.
 OUTPUT_FILE=${1:-$DEFAULT_OUTPUT}
 
-# Load Environment if present
-if [ -f "/app/.env" ]; then
-    set -a
-    source /app/.env
-    set +a
-fi
-
-# Args or Env
-CA_URL=${CA_URL:-}
-FINGERPRINT=${FINGERPRINT:-}
+# Load Environment from multiple possible locations
+ENV_LOCATIONS=("/app/.env" "$IAM_DIR/.env")
+for loc in "${ENV_LOCATIONS[@]}"; do
+    if [ -f "$loc" ]; then
+        echo "Loading env from $loc..."
+        # Extract variables manually to avoid shell pollution or failures in restricted shells
+        CA_URL=$(grep "^CA_URL=" "$loc" | cut -d= -f2- | tr -d '"' || echo "${CA_URL:-}")
+        FINGERPRINT=$(grep "^FINGERPRINT=" "$loc" | cut -d= -f2- | tr -d '"' || echo "${FINGERPRINT:-}")
+    fi
+done
 
 # Check Requirements
 if [ -z "$CA_URL" ]; then

@@ -4,15 +4,19 @@ set -euo pipefail
 # Script to fetch AD CA certificate for LDAPS trust
 # Usage: ./fetch_ad_cert.sh <ad_host> <port> [output_file]
 
+# Resolve Project Root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IAM_DIR="$(cd "$SCRIPT_DIR/../../infra-iam" && pwd)"
+
 if [ "$#" -lt 2 ]; then
     echo "Usage: $0 <ad_host> <port> [output_file]"
-    echo "Example: $0 ad.biome.unibo.it 636 ad_root_ca.crt"
+    echo "Example: $0 ad.biome.unibo.it 636 certs/ad_root_ca.crt"
     exit 1
 fi
 
 AD_HOST=$1
 AD_PORT=$2
-OUTPUT_FILE=${3:-ad_root_ca.crt}
+OUTPUT_FILE=${3:-$IAM_DIR/certs/ad_root_ca.crt}
 
 echo "Fetching certificate chain from ${AD_HOST}:${AD_PORT}..."
 
