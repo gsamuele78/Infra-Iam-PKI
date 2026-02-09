@@ -299,20 +299,22 @@ verify_cert() {
     echo ""
     echo -e "${BLUE}>>> Verification...${NC}"
     
-    CERT_FILE="/etc/ssh/ssh_host_ecdsa_key-cert.pub"
-    
     if [ -f "$CERT_FILE" ]; then
         echo -e "Certificate File: ${GREEN}FOUND${NC}"
         
-        # Verify signing CA against our local root
+        # Verify signing CA against our CA infrastructure
         CA_MATCH="${RED}MISMATCH${NC}"
         if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
-            EXPECTED_FP=$(step certificate fingerprint "$STEP_PATH/certs/root_ca.crt" 2>/dev/null || echo "unknown")
-            ACTUAL_FP=$(step ssh inspect "$CERT_FILE" | grep "Authority:" | awk '{print $NF}' | cut -d: -f2- 2>/dev/null || echo "not-found")
+            # Extract fingerprint from certificate (handle both step and ssh-keygen output)
+            ACTUAL_FP=$(step ssh inspect "$CERT_FILE" 2>/dev/null | grep "Authority:" | awk '{print $NF}' | cut -d: -f2- || \
+                       ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:" | awk '{print $NF}' | cut -d: -f2- || echo "not-found")
             
-            # Shorten for comparison if needed, but usually they match or don't
-            if [[ "$ACTUAL_FP" == "$EXPECTED_FP"* ]] || [[ "$EXPECTED_FP" == "$ACTUAL_FP"* ]]; then
-                CA_MATCH="${GREEN}MATCH${NC} (Verified by local Root CA)"
+            if [ "$ACTUAL_FP" != "not-found" ] && [ -n "$ACTUAL_FP" ]; then
+                # Fetch SSH roots from CA and check if our authority is one of them
+                # step ca ssh roots returns keys; we check if any fingerprint matches
+                if step ca ssh roots --ca-url "$CA_URL" --root "$STEP_PATH/certs/root_ca.crt" 2>/dev/null | step certificate fingerprint 2>/dev/null | grep -q "$ACTUAL_FP"; then
+                    CA_MATCH="${GREEN}MATCH${NC} (Verified by $CA_URL)"
+                fi
             fi
         fi
         
