@@ -112,7 +112,7 @@ echo "Generating token for '$HOSTNAME'..."
 # Create a temporary file for the password to ensure security
 PW_FILE=$(mktemp)
 chmod 600 "$PW_FILE"
-echo -n "$SSH_PASSWORD" > "$PW_FILE"
+echo "$SSH_HOST_PASSWORD" > "$PW_FILE"
 
 # Copy password to container to avoid stdin/TTY issues
 # Use a unique temp filename to avoid collisions
