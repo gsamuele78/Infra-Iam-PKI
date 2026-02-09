@@ -120,7 +120,7 @@ if [ "$ENABLE_SSH_PROVISIONER" = "true" ]; then
             --root /home/step/certs/root_ca.crt 2>/dev/null | grep -q "\"name\": \"ssh-host-jwk\""; then
             
             # Create a password-protected JWK provisioner
-            echo -n "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
+            printf "%s" "$SSH_HOST_PROVISIONER_PASSWORD" > /tmp/host_jwk_pass
             
             # 1. Generate Keypair if it doesn't exist
             if [ ! -f "/home/step/secrets/ssh_host_jwk_key" ]; then
