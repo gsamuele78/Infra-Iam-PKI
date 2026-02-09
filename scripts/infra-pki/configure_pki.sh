@@ -158,7 +158,7 @@ manage_secrets() {
         return
     fi
     
-    echo -n "$secret_val" > "$SECRETS_DIR/$secret_file"
+    printf "%s" "$secret_val" > "$SECRETS_DIR/$secret_file"
     echo -e "${GREEN}Secret updated.${NC}"
     sleep 1
 }

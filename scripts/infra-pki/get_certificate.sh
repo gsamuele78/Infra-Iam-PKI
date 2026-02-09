@@ -92,7 +92,7 @@ fi
 TOKEN=$(docker run --rm -i \
     --network host \
     smallstep/step-cli \
-    sh -c "step ca token $HOSTNAME --ca-url '$CA_URL' --root /dev/null --password-file /dev/stdin --provisioner '$PROVISIONER'" <<< "$CA_PASSWORD")
+    sh -c "printf '%s' \"$CA_PASSWORD\" | step ca token $HOSTNAME --ca-url '$CA_URL' --root /dev/null --password-file /dev/stdin --provisioner '$PROVISIONER'")
 
 echo "Requesting certificate for $HOSTNAME (SANs: $SANS)..."
 
