@@ -9,14 +9,6 @@
 		}
 	}
 	
-	:80 {
-		root * /var/www/html
-		file_server
-		
-		# Explicitly allow only specific files if needed, but root is read-only mount of certs/fingerprint
-		# Access: http://<ca-host>/certs/ssh_host_ca_key.pub
-		# Access: http://<ca-host>/fingerprint/fingerprint
-	}
 
 	log {
 		output file /var/log/caddy/access.log {
@@ -27,4 +19,9 @@
 		format json
 		level INFO
 	}
+}
+
+:80 {
+root * /var/www/html
+file_server
 }
