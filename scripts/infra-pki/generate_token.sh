@@ -120,6 +120,7 @@ TOKEN=$(docker exec -i step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
     --key /home/step/secrets/ssh_host_jwk_key \
     --password-file /dev/stdin \
+    --ssh \
     --host \
     < "$PW_FILE")
 
