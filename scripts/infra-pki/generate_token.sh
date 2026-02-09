@@ -114,17 +114,23 @@ PW_FILE=$(mktemp)
 chmod 600 "$PW_FILE"
 echo -n "$SSH_PASSWORD" > "$PW_FILE"
 
-# Pass the password file via stdin using redirection from the file
-# This is safer than pipes or here-strings in some environments
+# Copy password to container to avoid stdin/TTY issues
+# Use a unique temp filename to avoid collisions
+CONTAINER_PW_FILE="/home/step/temp_token_pw_$(date +%s)"
+docker cp "$PW_FILE" "step-ca:$CONTAINER_PW_FILE"
+
+# Execute step ca token using the file inside the container
 TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
     --key /home/step/secrets/ssh_host_jwk_key \
-    --password-file /dev/stdin \
+    --password-file "$CONTAINER_PW_FILE" \
     --ssh \
-    --host \
-    < "$PW_FILE")
+    --host)
 
-# Cleanup
+# Cleanup inside container
+docker exec step-ca rm -f "$CONTAINER_PW_FILE"
+
+# Cleanup local temp file
 rm -f "$PW_FILE"
 
 # 4. Output
