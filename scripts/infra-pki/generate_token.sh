@@ -116,7 +116,7 @@ echo -n "$SSH_PASSWORD" > "$PW_FILE"
 
 # Pass the password file via stdin using redirection from the file
 # This is safer than pipes or here-strings in some environments
-TOKEN=$(docker exec -i step-ca step ca token "$HOSTNAME" \
+TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
     --provisioner "$PROVISIONER" \
     --key /home/step/secrets/ssh_host_jwk_key \
     --password-file /dev/stdin \
