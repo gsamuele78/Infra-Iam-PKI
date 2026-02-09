@@ -305,20 +305,34 @@ verify_cert() {
         
         # Verify signing CA against our CA infrastructure
         CA_MATCH="${RED}MISMATCH${NC}"
-        if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
-            # Extract fingerprint from certificate (handle both step and ssh-keygen output)
-            ACTUAL_FP=$(step ssh inspect "$CERT_FILE" 2>/dev/null | grep "Authority:" | awk '{print $NF}' | cut -d: -f2- || \
-                       ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:" | awk '{print $NF}' | cut -d: -f2- || echo "not-found")
-            
-            if [ "$ACTUAL_FP" != "not-found" ] && [ -n "$ACTUAL_FP" ]; then
-                # Fetch SSH roots from CA and check if our authority is one of them
-                # step ca ssh roots returns keys; we check if any fingerprint matches
-                if step ca ssh roots --ca-url "$CA_URL" --root "$STEP_PATH/certs/root_ca.crt" 2>/dev/null | step certificate fingerprint 2>/dev/null | grep -q "$ACTUAL_FP"; then
-                    CA_MATCH="${GREEN}MATCH${NC} (Verified by $CA_URL)"
-                fi
-            fi
-        fi
         
+        # Determine Base URL for public artifacts (strip port 9000 if present, assume port 80/443 on same host)
+        # If CA_URL is https://ca.example.com:9000, we want http://ca.example.com/certs/ssh_host_ca_key.pub
+        # We'll try to guess the public endpoint or just try the same host
+        CA_HOST=$(echo "$CA_URL" | sed -e 's|^[^/]*//||' -e 's|:.*$||')
+        SSH_KEY_URL="http://${CA_HOST}/certs/ssh_host_ca_key.pub"
+        
+        # Download the SSH Host CA Key
+        TEMP_KEY=$(mktemp)
+        if curl -s -f "$SSH_KEY_URL" -o "$TEMP_KEY"; then
+             EXPECTED_FP=$(ssh-keygen -l -f "$TEMP_KEY" | awk '{print $2}' | cut -d: -f2-)
+             
+             # Extract fingerprint from certificate
+             ACTUAL_FP=$(ssh-keygen -L -f "$CERT_FILE" 2>/dev/null | grep "Signing CA:" | awk '{print $NF}' | cut -d: -f2- || echo "not-found")
+             
+             if [ "$ACTUAL_FP" != "not-found" ] && [ -n "$ACTUAL_FP" ]; then
+                if [[ "$ACTUAL_FP" == "$EXPECTED_FP"* ]] || [[ "$EXPECTED_FP" == "$ACTUAL_FP"* ]]; then
+                    CA_MATCH="${GREEN}MATCH${NC} (Verified by $SSH_KEY_URL)"
+                fi
+             fi
+        else
+             # Fallback to local check if we are on the CA server or have the file
+             if [ -f "$STEP_PATH/certs/root_ca.crt" ]; then
+                  CA_MATCH="${YELLOW}UNKNOWN${NC} (Could not fetch SSH CA Key)"
+             fi
+        fi
+        rm -f "$TEMP_KEY"
+         
         echo -e "Status:           ${GREEN}✓ VALID${NC}"
         echo -e "Authority:        $CA_MATCH"
         echo "---------------------------------------------------"
