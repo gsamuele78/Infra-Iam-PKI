@@ -307,10 +307,10 @@ verify_cert() {
         
         # Display certificate details
         if command -v step &>/dev/null; then
-            step ssh inspect "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:" -A 5 | grep -v "^--" || \
-                ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:" -A 5 | grep -v "^--"
+            step ssh inspect "$CERT_FILE" | grep -E "Type:|Key ID:|Authority:|Valid:|Principals:" -A 5 | grep -v "^--" || \
+                ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Signing CA:|Key ID:|Valid:|Principals:" -A 5 | grep -v "^--"
         else
-            ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Key ID:|Valid:|Principals:" -A 5 | grep -v "^--"
+            ssh-keygen -L -f "$CERT_FILE" | grep -E "Type:|Signing CA:|Key ID:|Valid:|Principals:" -A 5 | grep -v "^--"
         fi
         
         echo "---------------------------------------------------"
