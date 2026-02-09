@@ -118,6 +118,7 @@ echo -n "$SSH_PASSWORD" > "$PW_FILE"
 # Use a unique temp filename to avoid collisions
 CONTAINER_PW_FILE="/home/step/temp_token_pw_$(date +%s)"
 docker cp "$PW_FILE" "step-ca:$CONTAINER_PW_FILE"
+docker exec step-ca chown step:step "$CONTAINER_PW_FILE"
 
 # Execute step ca token using the file inside the container
 TOKEN=$(docker exec step-ca step ca token "$HOSTNAME" \
