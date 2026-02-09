@@ -78,9 +78,17 @@ read -p "Choice [1]: " TYPE
 
 # --- Auto-Detect SSH Provisioner ---
 echo "Detecting SSH Provisioner..."
-# Look for a provisioner that looks like an SSH Host JWK provisioner (by name convetion or type)
-# We default to 'ssh-host-jwk' which is standard
-DETECTED_SSH_PROV=$(docker exec step-ca step ca provisioner list 2>/dev/null | grep -B 5 '"type": "JWK"' | grep '"name":' | grep "ssh-host" | head -n 1 | cut -d'"' -f4)
+
+# Verify container is running first
+if ! docker ps --format '{{.Names}}' | grep -q "^step-ca$"; then
+    echo -e "${RED}Error: 'step-ca' container is not running.${NC}"
+    echo "Please start the stack with: docker compose up -d"
+    exit 1
+fi
+
+# Look for a provisioner that looks like an SSH Host JWK provisioner
+# We use '|| true' to prevent script exit if grep finds nothing (set -e is active)
+DETECTED_SSH_PROV=$(docker exec step-ca step ca provisioner list 2>/dev/null | grep -B 5 '"type": "JWK"' | grep '"name":' | grep "ssh-host" | head -n 1 | cut -d'"' -f4 || true)
 
 if [ -n "$DETECTED_SSH_PROV" ]; then
     PROVISIONER="$DETECTED_SSH_PROV"
