@@ -93,11 +93,11 @@ toggle_env() {
     fi
     
     if grep -q "^$var_name=" "$ENV_FILE"; then
-        sed -i "s/^$var_name=.*/$var_name=$new_val/" "$ENV_FILE"
+        sed -i "s/^$var_name=.*/$var_name=\"$new_val\"/" "$ENV_FILE"
     else
-        echo "$var_name=$new_val" >> "$ENV_FILE"
+        echo "$var_name=\"$new_val\"" >> "$ENV_FILE"
     fi
-    echo "Updated $var_name to $new_val."
+    echo "Updated $var_name to \"$new_val\"."
     sleep 1
 }
 
