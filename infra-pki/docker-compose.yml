@@ -135,11 +135,14 @@ services:
     restart: unless-stopped
     ports:
       - "9000:9000"
+      - "80:80"
     environment:
       - ALLOWED_IPS=${ALLOWED_IPS}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - ./logs/caddy:/var/log/caddy
+      - ./step_data/certs:/var/www/html/certs:ro
+      - ./step_data/fingerprint:/var/www/html/fingerprint:ro
     depends_on:
       step-ca:
         condition: service_healthy
