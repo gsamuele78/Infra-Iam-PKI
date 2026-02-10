@@ -27,6 +27,29 @@ graph TD
 | **setup** | Init container for fetching certs | Internal usage |
 | **renewer** | Auto-renews internal certificates | Internal usage |
 
+## Automated Management Stack
+
+This service uses a **Sidecar Pattern** to automate lifecycle management:
+
+### 1. Initialization Service (`iam-init`)
+
+- **Status**: Ephemeral (Runs once at startup).
+- **Role**: Bootstraps the environment.
+- **Tasks**:
+  - Creates required directories (`/certs`, `/data`).
+  - Fixes permissions (`chown`) to match the non-root PUID/PGID.
+  - Fetches the Root CA from `infra-pki`.
+  - Fetches the Active Directory CA certificate.
+
+### 2. Renew Service (`iam-renewer`)
+
+- **Status**: Sidecar (Runs continuously).
+- **Role**: Certificate Lifecycle Management.
+- **Tasks**:
+  - **Enrollment**: On first run, exchanges the `STEP_TOKEN` for a certificate.
+  - **Renewal**: Every 24 hours, checks if the certificate is nearing expiration.
+  - **Rotation**: If renewed, automatically restarts `iam-keycloak` to apply the new certificate.
+
 ## Integrations
 
 - **Infra-PKI**: The system trusts the internal Root CA to enable secure communication with other internal services.
@@ -37,6 +60,7 @@ graph TD
 ### 1. Administrative Access
 
 Access the Keycloak Administration Console to manage realms, clients, and users.
+
 - **URL**: `https://sso.example.com`
 - **Credentials**: `admin` / `<KC_ADMIN_PASSWORD>` relative to `.env`.
 

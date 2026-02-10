@@ -37,10 +37,14 @@ services:
     command: >
       -c "apk add --no-cache docker-cli bash && while true; do
         echo 'Checking certificates...' &&
-        /scripts/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key &&
+        /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key &&
         docker restart iam-keycloak || true;
         sleep 86400;
       done"
+    environment:
+      - STEP_TOKEN=${STEP_TOKEN}
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
     volumes:
       - ./certs:/certs
       - ../scripts:/scripts

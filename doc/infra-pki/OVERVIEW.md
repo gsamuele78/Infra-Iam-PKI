@@ -15,7 +15,17 @@ The architecture is designed for **high availability**, **security**, and **obse
 * **Caddy (Layer 4)**: A custom-built reverse proxy that handles incoming TCP traffic. It effectively masks the CA backend and provides a control layer for **IP Allowlisting**.
 * **Initialization Scripts**: Dynamic Bash scripts that auto-configure complex provisioners (OIDC, SSH-POP, ACME) on container startup, reducing manual configuration drift.
 
-### 2.2 Network Flow
+### 2.2 Automated Management Stack
+
+* **Init Service (`init-files`)**:
+  * **Status**: Ephemeral (Pre-Start).
+  * **Role**: Prepares the filesystem permissions (`PUID:PGID`) and secret files before the main CA starts.
+* **Configurator (`configurator`)**:
+  * **Status**: Ephemeral (Post-Start).
+  * **Role**: Dynamic Provisioning.
+  * **Tasks**: Connects to the running CA to configure OIDC, ACME, and SSH provisioners based on environment variables.
+
+### 2.3 Network Flow
 
 1. **Ingress**: Client requests (ACME, OIDC, API) hit the **Caddy** proxy on port `9000`.
 2. **Filtering**: Caddy validates the source IP against the `ALLOWED_IPS` environment variable.
