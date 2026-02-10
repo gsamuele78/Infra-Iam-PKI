@@ -30,7 +30,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Step 1: Validate configuration
-echo -e "${BLUE}[Step 1/6] Validating configuration...${NC}"
+echo -e "${BLUE}[Step 1/7] Validating configuration...${NC}"
 chmod +x "$SCRIPT_DIR/validate_iam_config.sh"
 if "$SCRIPT_DIR/validate_iam_config.sh" --pre-deploy; then
     echo -e "${GREEN}✓ Configuration validated${NC}"
@@ -45,13 +45,13 @@ fi
 
 # Step 2: Create required directories
 echo ""
-echo -e "${BLUE}[Step 2/6] Creating directory structure...${NC}"
+echo -e "${BLUE}[Step 2/7] Creating directory structure...${NC}"
 mkdir -p "$IAM_DIR"/{keycloak_data,caddy_data,logs/watchtower,certs}
 echo -e "${GREEN}✓ Directories created${NC}"
 
 # Step 3: Set permissions
 echo ""
-echo -e "${BLUE}[Step 3/6] Setting permissions...${NC}"
+echo -e "${BLUE}[Step 3/7] Setting permissions...${NC}"
 # Extract PUID/PGID stripping quotes
 PUID=$(grep "^PUID=" "$IAM_DIR/.env" | cut -d= -f2- | tr -d '"')
 PGID=$(grep "^PGID=" "$IAM_DIR/.env" | cut -d= -f2- | tr -d '"')
@@ -66,24 +66,53 @@ else
     echo -e "${YELLOW}⚠ Could not read PUID/PGID from .env, skipping permissions fix${NC}"
 fi
 
-# Step 4: Pull/build images
+# Step 4: Check for Certificate Enrollment (Token Prompt)
 echo ""
-echo -e "${BLUE}[Step 4/6] Building and pulling images...${NC}"
+echo -e "${BLUE}[Step 4/7] Checking for Enrollment Token...${NC}"
+CRT_FILE="$IAM_DIR/certs/keycloak.crt"
+export STEP_TOKEN=""
+
+if [ ! -f "$CRT_FILE" ]; then
+    echo -e "${YELLOW}⚠ Host Certificate not found ($CRT_FILE)${NC}"
+    echo "Ideally, you should have generated a token on your PKI host using 'generate_token.sh'."
+    echo ""
+    read -p "Enter Step-CA Token: " INPUT_TOKEN
+    
+    if [ -n "$INPUT_TOKEN" ]; then
+        # Export for docker compose to pick up
+        export STEP_TOKEN="$INPUT_TOKEN"
+        echo -e "${GREEN}✓ Token captured. Will perform enrollment on startup.${NC}"
+    else
+        echo -e "${RED}Warning: No token provided. Startup may fail if certificates are missing.${NC}"
+        read -p "Continue anyway? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+else
+    echo -e "${GREEN}✓ Certificate exists, skipping enrollment.${NC}"
+fi
+
+# Step 5: Pull/build images
+echo ""
+echo -e "${BLUE}[Step 5/7] Building and pulling images...${NC}"
 cd "$IAM_DIR"
 docker compose build
 echo -e "${GREEN}✓ Images ready${NC}"
 
-# Step 5: Deploy
+# Step 6: Deploy
 echo ""
-echo -e "${BLUE}[Step 5/6] Deploying services...${NC}"
-docker compose up -d
+echo -e "${BLUE}[Step 6/7] Deploying services...${NC}"
+# Explicitly pass the STEP_TOKEN variable to the command
+STEP_TOKEN="${STEP_TOKEN}" docker compose up -d
 
 echo "Waiting for services to initialize..."
 sleep 10
 
-# Step 6: Verify deployment
+# Step 7: Verify deployment
 echo ""
-echo -e "${BLUE}[Step 6/6] Verifying deployment...${NC}"
+echo -e "${BLUE}[Step 7/7] Verifying deployment...${NC}"
 
 # Post-deployment validation
 "$SCRIPT_DIR/validate_iam_config.sh" --post-deploy || echo -e "${YELLOW}⚠ Post-deploy checks found issues${NC}"
