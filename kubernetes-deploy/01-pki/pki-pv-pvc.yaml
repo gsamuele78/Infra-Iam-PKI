@@ -1,0 +1,27 @@
+# PersistentVolumeClaims for PKI Database and CA Data
+# Requires a default StorageClass in RKE2 (usually local-path if using defaults out of the box)
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pki-db-data
+  namespace: pki
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pki-step-data
+  namespace: pki
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

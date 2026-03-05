@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pki
+  labels:
+    environment: production
+    tier: security
+    name: pki
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iam
+  labels:
+    environment: production
+    tier: identity
+    name: iam
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ood
+  labels:
+    environment: production
+    tier: frontend
+    name: ood

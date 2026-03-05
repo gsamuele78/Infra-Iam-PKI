@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: iam
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+    - name: https
+      protocol: TCP
+      port: 8443
+      targetPort: 8443
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: iam
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      
+      initContainers:
+      # 1. Pessimistic DB Wait: Keycloak hangs if DB is not ready during boot
+      - name: wait-for-db
+        image: postgres:15-alpine
+        command: ['sh', '-c', 'until pg_isready -h iam-db -U keycloak; do echo waiting for db; sleep 2; done;']
+      
+      # 2. Extract internal certificates dynamically from PKI API instead of generic volumes
+      - name: fetch-pki-certs
+        image: smallstep/step-cli:0.25.2
+        env:
+        - name: STEPPATH
+          value: /tmp/step
+        command:
+        - sh
+        - -c
+        - |
+          # The PKI Service needs to be ready. 
+          # Note: We use step-ca.pki.svc.cluster.local:9000 since it is across namespaces
+          until step ca root /certs/root_ca.crt --ca-url https://step-ca.pki.svc.cluster.local:9000 --fingerprint ${FINGERPRINT} --force; do
+            echo "Waiting for PKI CA to come online..."
+            sleep 5
+          done
+          echo "Successfully fetched internal root."
+        volumeMounts:
+        - name: shared-certs
+          mountPath: /certs
+
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:23.0
+        args: ["start", "--optimized"]
+        env:
+        - name: KC_DB
+          value: postgres
+        - name: KC_DB_URL
+          value: "jdbc:postgresql://iam-db:5432/keycloak"
+        - name: KC_DB_USERNAME
+          value: keycloak
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iam-secrets
+              key: DB_PASSWORD
+        - name: KEYCLOAK_ADMIN
+          value: admin
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iam-secrets
+              key: KC_ADMIN_PASSWORD
+        - name: KC_HOSTNAME
+          value: "sso.bigea.unibo.it"
+        # Enable HTTPS using the newly fetched certs
+        - name: KC_HTTPS_CERTIFICATE_FILE
+          value: /certs/server.crt
+        - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+          value: /certs/server.key
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8443
+          name: https
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "500m"
+          limits:
+            memory: "2048Mi"
+            cpu: "2000m"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        volumeMounts:
+        - name: shared-certs
+          mountPath: /certs
+          readOnly: true
+      
+      volumes:
+      - name: shared-certs
+        emptyDir: {}
