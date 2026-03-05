@@ -1,0 +1,92 @@
+/* BiGeA Department Custom Tailwind/CSS overrides for Open OnDemand */
+/* Ensures strict alignment with https://bigea.unibo.it/it */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --unibo-red: #C80E0F;
+  --unibo-red-dark: #9A0B0B;
+  --bigea-gray: #2C3E50;
+  --bg-gradient-start: #111827;
+  --bg-gradient-end: #3a0808;
+}
+
+body {
+  font-family: 'Inter', sans-serif !important;
+  background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end)) !important;
+  background-attachment: fixed !important;
+  color: #F3F4F6 !important;
+}
+
+/* Glassmorphism Navbar */
+.navbar-inverse, .navbar-default {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.navbar-brand {
+    color: white !important;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+}
+
+.navbar-brand::after {
+    content: " Dipartimento BiGeA";
+    color: #cbd5e1;
+    font-weight: 400;
+}
+
+/* Interactive Apps Cards */
+.card, .panel {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 1rem !important;
+  color: white !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover, .panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+}
+
+.card-header, .panel-heading {
+  background-color: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+.card-title, .panel-title {
+  color: white !important;
+  font-weight: 600;
+}
+
+/* Primary Buttons (Unibo Red) */
+.btn-primary {
+  background-color: var(--unibo-red) !important;
+  border-color: var(--unibo-red) !important;
+  border-radius: 0.75rem !important;
+  font-weight: 600 !important;
+  padding: 0.5rem 1rem !important;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--unibo-red-dark) !important;
+  transform: scale(0.98);
+}
+
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6 {
+  color: white !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+p, span, td, th {
+  color: #e2e8f0 !important;
+}

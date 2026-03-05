@@ -2,14 +2,25 @@ services:
   # 1. Initialization Service
   # Standardized with infra-pki pattern: root entrypoint to fix permissions
   iam-init:
-    image: smallstep/step-cli:0.29.0
+    build:
+      context: .
+      dockerfile: Dockerfile.init
     container_name: iam-init
     user: root
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     entrypoint: /bin/sh
     command: >
-      -c "apk add --no-cache bash openssl && mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /certs /data/postgres /data/caddy /data/watchtower_logs && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt && /scripts/infra-iam/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt"
+      -c "mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /certs /data/postgres /data/caddy /data/watchtower_logs && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt && /scripts/infra-iam/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt"
     volumes:
       - ./keycloak_data:/data/postgres
       - ./caddy_data:/data/caddy
@@ -25,17 +36,45 @@ services:
         max-file: "5"
         max-size: "15m"
 
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:edge
+    container_name: iam-docker-proxy
+    environment:
+      - CONTAINERS=1
+      - POST=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
   renewer:
-    image: smallstep/step-cli:0.29.0
+    build:
+      context: .
+      dockerfile: Dockerfile.renewer
     container_name: iam-renewer
     user: root
     restart: unless-stopped
     depends_on:
       iam-init:
         condition: service_completed_successfully
+      docker-socket-proxy:
+        condition: service_started
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
     entrypoint: /bin/sh
     command: >
-      -c "apk add --no-cache docker-cli bash && while true; do
+      -c "while true; do
         echo 'Checking certificates...' &&
         /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key &&
         docker restart iam-keycloak || true;
@@ -45,10 +84,10 @@ services:
       - STEP_TOKEN=${STEP_TOKEN}
       - CA_URL=${CA_URL}
       - FINGERPRINT=${FINGERPRINT}
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
     volumes:
       - ./certs:/certs
       - ../scripts:/scripts
-      - /var/run/docker.sock:/var/run/docker.sock
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     logging: *default-logging
@@ -58,6 +97,13 @@ services:
     container_name: iam-db
     user: "${PUID}:${PGID}"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
@@ -82,6 +128,14 @@ services:
     container_name: iam-keycloak
     user: "${PUID}:${PGID}"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+        reservations:
+          memory: 1024M
+          cpus: '0.5'
     command: start --optimized
     environment:
       KC_DB: postgres
@@ -95,6 +149,7 @@ services:
     volumes:
       - ./certs/ad_root_ca.crt:/etc/x509/ca/ad_root_ca.crt:ro
       - ./certs/root_ca.crt:/etc/x509/ca/root_ca.crt:ro
+      - ./themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -123,6 +178,11 @@ services:
     container_name: iam-proxy
     user: "${PUID}:${PGID}"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
     ports:
       - "80:80"
       - "443:443"
@@ -146,6 +206,11 @@ services:
   watchtower:
     image: nickfedor/watchtower:1.7.1
     container_name: iam-watchtower
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
     environment:
       - DOCKER_API_VERSION=1.44
     volumes:

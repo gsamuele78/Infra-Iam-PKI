@@ -24,8 +24,9 @@ graph TD
 | **keycloak** | The Identity Provider (IdP) | Admin: `admin` / `${KC_ADMIN_PASSWORD}` |
 | **db** | PostgreSQL backend for Keycloak | User: `keycloak` / `${DB_PASSWORD}` |
 | **caddy** | TLS Termination & Reverse Proxy | Auto-managed Certificates |
-| **setup** | Init container for fetching certs | Internal usage |
-| **renewer** | Auto-renews internal certificates | Internal usage |
+| **iam-init** | Ephemeral Init container for fetching certs | Internal API |
+| **renewer** | Auto-renews internal certs (Restarts Keycloak) | Internal API |
+| **docker-socket-proxy** | Security proxy for docker.sock protecting host | Internal usage |
 
 ## Automated Management Stack
 
@@ -50,10 +51,22 @@ This service uses a **Sidecar Pattern** to automate lifecycle management:
   - **Renewal**: Every 24 hours, checks if the certificate is nearing expiration.
   - **Rotation**: If renewed, automatically restarts `iam-keycloak` to apply the new certificate.
 
+## Security & Multi-Host Design (PRD Compliant)
+
+- **Multi-Host Architecture:** The IAM stack can run fully isolated on its own server. Certificate trust anchors are retrieved securely over the network via the `infra-pki` Step-CA API using `fetch_pki_root.sh`, completely eliminating the need for shared file systems.
+- **Pessimistic Resource Constraints:** All underlying compose services enforce strict CPU (`cpus`) and RAM (`memory`) limits using cgroups. This guarantees Keycloak (Java) or Postgres spikes cannot trigger host-level failures (OOM).
+- **Immutable Containers:** The `iam-init` and `renewer` components use dedicated `Dockerfile`s to bake Alpine packages (`bash`, `openssl`, `docker-cli`) directly into the image at build time, eliminating runtime failures if package mirrors are offline.
+- **Zero-Trust Docker Socket:** The `renewer` container does NOT mount the highly privileged `/var/run/docker.sock`. Instead, it communicates via an internal network with `tecnativa/docker-socket-proxy`, which exposes *only* the specific REST API endpoint required to restart the Keycloak container.
+
+## Custom UI (BiGeA / Univ. Bologna)
+
+The Keycloak login interface abandons the default template and loads a custom **Tailwind CSS** theme strictly mapping the specifications of `bigea.unibo.it`. It features the institutional Unibo Red palette and modern *glassmorphism* styling.
+
 ## Integrations
 
-- **Infra-PKI**: The system trusts the internal Root CA to enable secure communication with other internal services.
-- **Active Directory**: Integrated via LDAPS for user federation (requires `fetch_ad_cert.sh`).
+- **Infra-PKI**: The system trusts the internal Root CA to enable secure communication.
+- **Active Directory**: Integrated via LDAPS for user federation.
+- **Open OnDemand (OOD)**: Integrates seamlessly via OIDC to provide frontend portal access.
 
 ## Usage Scenarios
 

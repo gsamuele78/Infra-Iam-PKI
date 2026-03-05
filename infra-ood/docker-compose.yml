@@ -1,0 +1,59 @@
+services:
+  ood-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.init
+    container_name: ood-init
+    user: root
+    networks: [ ood-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    command: >
+      -c "mkdir -p /certs /data/ood_config /public && chown -R 1000:1000 /certs /data/ood_config /public && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt"
+    volumes:
+      - ./certs:/certs
+      - ./data:/data
+      - ./scripts:/scripts
+      - .env:/app/.env
+
+  ood-portal:
+    image: osc/ondemand:3.1.0
+    container_name: ood-portal
+    # Open OnDemand requires root to execute 'sudo' for user-specific app spawning
+    user: root
+    restart: unless-stopped
+    depends_on:
+      ood-init:
+        condition: service_completed_successfully
+    networks:
+      - ood-net
+    # RStudio relies on host network in R-studioConf, allowing OOD to hit it directly if bridging allows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+    environment:
+      # OIDC Integration Variables mapped from infra-iam
+      - OIDC_URI=${OIDC_ENDPOINT}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+    volumes:
+      - ./config/ood_portal.yml:/etc/ood/config/ood_portal.yml:ro
+      - ./config/ondemand.d:/etc/ood/config/ondemand.d:ro
+      - ./public/bigea-theme.css:/var/www/ood/public/bigea-theme.css:ro
+      - ./certs:/certs:ro
+      # Import Internal PKI Root (dynamically fetched by ood-init)
+      - ./certs/root_ca.crt:/etc/pki/ca-trust/source/anchors/step-ca.crt:ro
+    entrypoint: /bin/bash -c "update-ca-trust && exec /usr/sbin/httpd -DFOREGROUND"
+
+networks:
+  ood-net:
+    name: ood-net
