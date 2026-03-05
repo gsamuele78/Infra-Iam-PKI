@@ -42,9 +42,11 @@ The architecture is designed for **high availability**, **security**, and **obse
 * **Host Trust Management**: Dedicated script `manage_host_trust.sh` to safely install the internal Root CA on the server host.
 * **Client Tooling**: A dedicated `client/` directory containing standalone scripts (`join_pki.sh`) for enrolling remote hosts without needing the full repo.
 
-## 4. Security Considerations
+## 4. Security Considerations & Multi-Host Architecture (PRD Compliant)
 
-* **Network Isolation**: Database is not exposed. CA is only accessible via the Proxy.
-* **Secrets Management**: Critical secrets (CA password, OIDC Client Secret) are injected via `docker-compose.yml` from a secured `.env` file.
+* **Multi-Host Decoupling**: The PKI system operates autonomously and can be deployed on a dedicated server. Remote clusters (`infra-iam`, `infra-ood`) query the Root CA remotely via tokens and fingerprints without requiring shared host volumes.
+* **Pessimistic System Constraints**: 100% of the containers deployed define hard CPU and Memory `limits` to prevent cascading failures.
+* **Network Isolation**: Database is not exposed. CA is only accessible via the Proxy across the isolated `pki-net`.
+* **Zero-Trust Scripting**: Scripts utilize `set -euo pipefail` and will explicitly abort deployment operations (`exit 1`) if permission verifications fail.
+* **Secrets Management**: Critical secrets (CA password, OIDC Client Secret) are injected via `docker-compose.yml` from a secured `.env` file. (Passwords are written securely rather than executing raw `sed`/`awk` over strings).
 * **Ephemeral Tokens**: Uses short-lived tokens for provisioning to minimize attack surface.
-* **Script Hardening**: All scripts utilize `set -euo pipefail` and avoid passing passwords via command-line arguments (using temporary files or stdin).

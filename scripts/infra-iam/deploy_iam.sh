@@ -58,8 +58,10 @@ PGID=$(grep "^PGID=" "$IAM_DIR/.env" | cut -d= -f2- | tr -d '"')
 
 if [ -n "$PUID" ] && [ -n "$PGID" ]; then
     echo "  Applying ownership ($PUID:$PGID) to data and certs..."
-    chown -R "$PUID:$PGID" "$IAM_DIR"/{keycloak_data,caddy_data,logs,certs} 2>/dev/null || \
-        echo -e "${YELLOW}⚠ Could not set ownership (may need sudo)${NC}"
+    if ! chown -R "$PUID:$PGID" "$IAM_DIR"/{keycloak_data,caddy_data,logs,certs} 2>/dev/null; then
+        echo -e "${RED}✗ CRITICAL: Could not set ownership (requires sudo). Aborting to prevent container permission denied errors.${NC}"
+        exit 1
+    fi
     chmod 600 "$IAM_DIR/.env" 2>/dev/null || true
     echo -e "${GREEN}✓ Permissions set${NC}"
 else
@@ -115,7 +117,10 @@ echo ""
 echo -e "${BLUE}[Step 7/7] Verifying deployment...${NC}"
 
 # Post-deployment validation
-"$SCRIPT_DIR/validate_iam_config.sh" --post-deploy || echo -e "${YELLOW}⚠ Post-deploy checks found issues${NC}"
+if ! "$SCRIPT_DIR/validate_iam_config.sh" --post-deploy; then
+    echo -e "${RED}✗ CRITICAL: Post-deploy checks failed.${NC}"
+    exit 1
+fi
 
 # Check container status
 echo ""

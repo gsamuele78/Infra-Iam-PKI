@@ -1,0 +1,22 @@
+# Open OnDemand Configuration for BiGeA / R-studioConf Integration
+---
+# Authenticate against the Keycloak (infra-iam) stack using OpenID Connect
+auth:
+  - 'AuthType openidc'
+  - 'Require valid-user'
+
+# OIDC Apache mod_auth_openidc configurations
+oidc_uri: '/oidc'
+oidc_provider_metadata_url: '%{env:OIDC_URI}'
+oidc_client_id: '%{env:OIDC_CLIENT_ID}'
+oidc_client_secret: '%{env:OIDC_CLIENT_SECRET}'
+oidc_remote_user_claim: 'preferred_username'
+oidc_scope: 'openid profile email'
+
+# Inject BiGeA Custom Styling
+custom_css_files:
+  - '/public/bigea-theme.css'
+
+# Dashboard specific configurations aligning with R-studioConf
+dashboard_title: 'Servizi Informatici - Dipartimento BiGeA'
+logo: '/public/unibo_logo.png'

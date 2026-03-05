@@ -1,0 +1,11 @@
+FROM smallstep/step-cli:0.29.0
+
+USER root
+
+# Install required packages at build time to ensure immutability
+# hadolint ignore=DL3018
+RUN apk add --no-cache bash openssl
+
+USER step
+
+# The entrypoint will simply be set to /bin/bash in the compose file
