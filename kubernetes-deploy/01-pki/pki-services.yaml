@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: step-ca-db
+  namespace: pki
+spec:
+  type: ClusterIP
+  selector:
+    app: step-ca-db
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: step-ca
+  namespace: pki
+spec:
+  # Using NodePort to expose TCP/9000 for external integration easily without LoadBalancer
+  type: NodePort
+  selector:
+    app: step-ca
+  ports:
+    - protocol: TCP
+      port: 9000
+      targetPort: 9000
+      nodePort: 30900

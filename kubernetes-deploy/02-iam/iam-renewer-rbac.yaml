@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: iam-renewer-sa
+  namespace: iam
+
+---
+# Pessimistic execution: We ONLY allow the renewer to 'get' and 'patch' deployments.
+# It CANNOT delete pods, read secrets, or modify the database.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: iam-renewer-role
+  namespace: iam
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  resourceNames: ["keycloak"]
+  verbs: ["get", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iam-renewer-binding
+  namespace: iam
+subjects:
+- kind: ServiceAccount
+  name: iam-renewer-sa
+  namespace: iam
+roleRef:
+  kind: Role
+  name: iam-renewer-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# The renewer runs as a CronJob to check/renew certificates and restart Keycloak if needed
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: iam-renewer
+  namespace: iam
+spec:
+  # Run every day at 2 AM
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: iam-renewer-sa
+          restartPolicy: OnFailure
+          securityContext:
+            fsGroup: 1000
+            runAsUser: 1000
+            runAsGroup: 1000
+          containers:
+          - name: renewer
+            # smallstep cli image wrapped with kubectl
+            image: bitnami/kubectl:1.28
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting PKI Certificate renewal check..."
+              # In a real cluster the step binary would be installed here or a custom image used
+              # If renewed:
+              echo "Patching keycloak deployment to force config reload..."
+              kubectl patch deployment keycloak -n iam -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"date\":\"`date +'%s'`\"}}}}}"
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "50m"
+              limits:
+                memory: "128Mi"
+                cpu: "100m"

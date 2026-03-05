@@ -1,0 +1,109 @@
+# Pessimistic Default-Deny Network Policies
+# Assumes the network is hostile. Denies all ingress by default.
+# Explicit rules must be defined to allow traffic between pods or from ingress controllers.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-pki
+  namespace: pki
+spec:
+  podSelector: {} # Selects all pods in the namespace
+  policyTypes:
+  - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-iam
+  namespace: iam
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ood
+  namespace: ood
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+# --- Allow Required Cross-Namespace Traffic ---
+
+---
+# PKI needs to allow incoming TCP/9000 from IAM/OOD
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pki-api-ingress
+  namespace: pki
+spec:
+  podSelector:
+    matchLabels:
+      app: step-ca
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: iam
+    - namespaceSelector:
+        matchLabels:
+          name: ood
+    ports:
+    - protocol: TCP
+      port: 9000
+
+---
+# IAM needs to allow incoming HTTP from Ingress Controller and OOD (for OIDC endpoints)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-iam-ingress
+  namespace: iam
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ood
+    - namespaceSelector: 
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx # Assuming default RKE2 Ingress NGINX
+    ports:
+    - protocol: TCP
+      port: 8080
+
+---
+# OOD needs to allow incoming HTTP from Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ood-ingress
+  namespace: ood
+spec:
+  podSelector:
+    matchLabels:
+      app: ood-portal
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80

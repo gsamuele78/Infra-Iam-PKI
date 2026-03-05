@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: step-ca-db
+  namespace: pki
+spec:
+  serviceName: step-ca-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: step-ca-db
+  template:
+    metadata:
+      labels:
+        app: step-ca-db
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          value: "stepca"
+        - name: POSTGRES_DB
+          value: "step_ca"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pki-secrets
+              key: DB_PASSWORD
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        # Pessimistic Liveness Probe
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "stepca"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Pessimistic Readiness Probe
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "stepca"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: db-data
+        persistentVolumeClaim:
+          claimName: pki-db-data
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: step-ca
+  namespace: pki
+spec:
+  serviceName: step-ca
+  replicas: 1
+  selector:
+    matchLabels:
+      app: step-ca
+  template:
+    metadata:
+      labels:
+        app: step-ca
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+      # Pessimistic wait for DB
+      - name: wait-for-db
+        image: postgres:15-alpine
+        command: ['sh', '-c', 'until pg_isready -h step-ca-db -U stepca; do echo waiting for db; sleep 2; done;']
+      containers:
+      - name: step-ca
+        image: smallstep/step-ca:0.25.2
+        env:
+        - name: DOCKER_STEPCA_INIT_NAME
+          value: "Internal PKI"
+        - name: DOCKER_STEPCA_INIT_DNS_NAMES
+          value: "step-ca,localhost"
+        - name: DOCKER_STEPCA_INIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pki-secrets
+              key: CA_PASSWORD
+        ports:
+        - containerPort: 9000
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9000
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: step-data
+          mountPath: /home/step
+      volumes:
+      - name: step-data
+        persistentVolumeClaim:
+          claimName: pki-step-data

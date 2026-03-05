@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ood-portal
+  namespace: ood
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ood-portal
+  template:
+    metadata:
+      labels:
+        app: ood-portal
+    spec:
+      # OOD often requires root initially to spawn user-level PUNs
+      securityContext:
+        runAsUser: 0
+      
+      initContainers:
+      # Pessimistic Init: Fetch PKI Root for Internal Trust mapping
+      - name: fetch-pki-certs
+        image: smallstep/step-cli:0.25.2
+        env:
+        - name: STEPPATH
+          value: /tmp/step
+        command:
+        - sh
+        - -c
+        - |
+          # Fetch the PKI Trust Anchor
+          until step ca root /certs/root_ca.crt --ca-url https://step-ca.pki.svc.cluster.local:9000 --fingerprint ${FINGERPRINT} --force; do
+            echo "Waiting for PKI CA to come online..."
+            sleep 5
+          done
+          echo "Successfully fetched internal root."
+        volumeMounts:
+        - name: shared-certs
+          mountPath: /certs
+
+      containers:
+      - name: ood-portal
+        image: osc/ondemand:3.1.0
+        # Wait for the trust chain to hit before launching Apache
+        command: ["/bin/bash", "-c"]
+        args: ["update-ca-trust && exec /usr/sbin/httpd -DFOREGROUND"]
+        ports:
+        - containerPort: 80
+          name: http
+        resources:
+          requests:
+            memory: "1024Mi"
+            cpu: "500m"
+          limits:
+            memory: "2048Mi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        volumeMounts:
+        - name: config-vol
+          mountPath: /etc/ood/config/ood_portal.yml
+          subPath: ood_portal.yml
+          readOnly: true
+        - name: theme-vol
+          mountPath: /var/www/ood/public/bigea-theme.css
+          subPath: bigea-theme.css
+          readOnly: true
+        - name: shared-certs
+          mountPath: /etc/pki/ca-trust/source/anchors/step-ca.crt
+          subPath: root_ca.crt
+          readOnly: true
+      
+      volumes:
+      - name: config-vol
+        configMap:
+          name: ood-config
+      - name: theme-vol
+        configMap:
+          name: ood-bigea-theme
+      - name: shared-certs
+        emptyDir: {}
