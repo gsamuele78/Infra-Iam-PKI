@@ -1,0 +1,1 @@
+{"nfs":{},"rsync":{"/workspace/Infra-Iam-PKI":{"type":"rsync","guestpath":"/workspace/Infra-Iam-PKI","hostpath":"/home/jfs/00_Antigravity_workspace/infra/Infra-Iam-PKI","disabled":false,"__vagrantfile":true,"owner":"vagrant","group":"vagrant"}}}

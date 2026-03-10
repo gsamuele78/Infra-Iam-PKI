@@ -187,7 +187,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./.Caddyfile:/etc/caddy/Caddyfile
       - ./caddy_data:/data
       - ./certs/root_ca.crt:/etc/ssl/certs/root_ca.crt
     healthcheck:
@@ -204,7 +204,7 @@ services:
     logging: *default-logging
 
   watchtower:
-    image: nickfedor/watchtower:1.7.1
+    image: containrrr/watchtower:1.7.1
     container_name: iam-watchtower
     deploy:
       resources:

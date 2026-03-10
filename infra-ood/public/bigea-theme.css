@@ -1,8 +1,5 @@
 /* BiGeA Department Custom Tailwind/CSS overrides for Open OnDemand */
 /* Ensures strict alignment with https://bigea.unibo.it/it */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 :root {
   --unibo-red: #C80E0F;
   --unibo-red-dark: #9A0B0B;
@@ -12,7 +9,7 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
   background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end)) !important;
   background-attachment: fixed !important;
   color: #F3F4F6 !important;

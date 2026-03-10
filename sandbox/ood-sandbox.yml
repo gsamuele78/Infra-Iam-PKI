@@ -1,0 +1,72 @@
+# sandbox/ood-sandbox.yml
+# Production-equivalent OOD fixture for ood-host (192.168.56.30)
+# Builds from Dockerfile.ood using official Ubuntu Noble 24.04 deb packages.
+# Open OnDemand is the only service on this host.
+---
+services:
+  ood-init:
+    # Fetches the PKI Root CA from pki-host so OOD can trust Keycloak's TLS
+    build:
+      context: ../infra-ood
+      dockerfile: Dockerfile.init
+    container_name: ood-init
+    restart: on-failure:3
+    networks: [ ood-net ]
+    environment:
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+    volumes:
+      - ood_certs:/app/certs
+      - ../scripts:/scripts:ro
+    entrypoint: /scripts/infra-iam/fetch_pki_root.sh /app/certs/root_ca.crt
+
+  ood-portal:
+    # Builds official OOD from Ubuntu Noble 24.04 apt packages (apt.osc.edu)
+    build:
+      context: ../infra-ood
+      dockerfile: Dockerfile.ood
+    image: infra-ood:sandbox
+    container_name: ood-portal
+    user: root
+    privileged: true
+    restart: unless-stopped
+    networks: [ ood-net ]
+    ports:
+      - "80:80"    # Exposed at 192.168.56.30:80 to the VM private network
+    depends_on:
+      ood-init:
+        condition: service_completed_successfully
+    environment:
+      - OIDC_URI=${OIDC_ENDPOINT}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
+    volumes:
+      - ../infra-ood/config/ood_portal.yml:/etc/ood/config/ood_portal.yml:ro
+      - ../infra-ood/public/bigea-theme.css:/var/www/ood/public/bigea-theme.css:ro
+      - ../infra-ood/public/img:/var/www/ood/public/img:ro
+      - ood_certs:/certs:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    cap_drop: [ ALL ]
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost/oidc || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+
+networks:
+  ood-net:
+    name: ood-net
+
+volumes:
+  ood_certs:

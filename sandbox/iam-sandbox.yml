@@ -1,0 +1,110 @@
+# sandbox/iam-sandbox.yml
+# Production-equivalent IAM fixture for iam-host (192.168.56.20)
+# Mirrors infra-iam/docker-compose.yml but with sandbox overrides:
+#   - no cert renewal (step-ca is on a different host, accessed by IP)
+#   - exposes Keycloak port to sandbox private network
+#   - uses sandbox test credentials
+---
+services:
+  iam-db:
+    image: postgres:15-alpine
+    container_name: iam-db
+    restart: unless-stopped
+    user: "1000:1000"
+    networks: [ iam-net ]
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: sandbox_db_password
+    volumes:
+      - iam_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  iam-init:
+    # Fetches the PKI Root CA from pki-host and writes it to ./certs/root_ca.crt
+    build:
+      context: ../infra-iam
+      dockerfile: Dockerfile.init
+    container_name: iam-init
+    restart: on-failure:5
+    networks: [ iam-net ]
+    environment:
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+    volumes:
+      - iam_certs:/app/certs
+      - ../scripts:/scripts:ro
+    entrypoint: /scripts/infra-iam/fetch_pki_root.sh /app/certs/root_ca.crt
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  iam-keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    container_name: iam-keycloak
+    restart: unless-stopped
+    networks: [ iam-net ]
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://iam-db/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: sandbox_db_password
+      KC_HOSTNAME: 192.168.56.20
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+    volumes:
+      - ../infra-iam/themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea:ro
+      - iam_certs:/opt/keycloak/conf/truststores:ro
+    depends_on:
+      iam-db:
+        condition: service_healthy
+      iam-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:9000/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '1.0'
+
+  iam-proxy:
+    image: caddy:2.9.1-alpine
+    container_name: iam-proxy
+    restart: unless-stopped
+    networks: [ iam-net ]
+    ports:
+      - "80:80"   # Accessible from ood-host at 192.168.56.20:80
+      - "443:443"
+    command: caddy reverse-proxy --from :80 --to iam-keycloak:8080
+    depends_on:
+      iam-keycloak:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  iam-net:
+    name: iam-net
+
+volumes:
+  iam_db_data:
+  iam_certs:

@@ -20,10 +20,14 @@ services:
       - .env:/app/.env
 
   ood-portal:
-    image: osc/ondemand:3.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.ood
+    image: infra-ood:latest
     container_name: ood-portal
     # Open OnDemand requires root to execute 'sudo' for user-specific app spawning
     user: root
+    privileged: true
     restart: unless-stopped
     depends_on:
       ood-init:
@@ -47,12 +51,18 @@ services:
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
     volumes:
       - ./config/ood_portal.yml:/etc/ood/config/ood_portal.yml:ro
-      - ./config/ondemand.d:/etc/ood/config/ondemand.d:ro
       - ./public/bigea-theme.css:/var/www/ood/public/bigea-theme.css:ro
       - ./certs:/certs:ro
       # Import Internal PKI Root (dynamically fetched by ood-init)
-      - ./certs/root_ca.crt:/etc/pki/ca-trust/source/anchors/step-ca.crt:ro
-    entrypoint: /bin/bash -c "update-ca-trust && exec /usr/sbin/httpd -DFOREGROUND"
+      - ./certs/root_ca.crt:/usr/local/share/ca-certificates/step-ca.crt:ro
+      - ./public/img:/var/www/ood/public/img:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    cap_drop: [ ALL ]
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
 
 networks:
   ood-net:

@@ -1,0 +1,183 @@
+:root {
+    --primary-green: #2F4F4F;
+    --sage-green: #8FBC8F;
+    --gold-accent: #D4AF37;
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --text-light: #F0FFF0;
+    --text-dark: #1a1a1a;
+    /* Unibo BiGeA standard colors */
+    --unibo-red: #C80E0F;
+    --bigea-gray: #2C3E50;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Outfit', sans-serif; /* We will use system fonts instead of Google fonts to avoid external calls */
+    color: var(--text-light);
+    min-height: 100vh;
+    overflow-y: auto;
+    background: linear-gradient(135deg, #111827, #3a0808);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.background-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(15, 31, 31, 0.4) 0%, rgba(15, 31, 31, 0.8) 100%);
+    backdrop-filter: blur(2px);
+    z-index: -1;
+}
+
+.main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem;
+    box-sizing: border-box;
+}
+
+.glass-header {
+    background: rgba(20, 40, 40, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 1.5rem 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 3rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.logo {
+    height: 80px;
+    width: auto;
+    max-width: 100%;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+
+.site-title h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.4rem, 4vw, 2.2rem);
+    white-space: nowrap;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    background: linear-gradient(45deg, #fff, #e0f2f1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    margin: 0.2rem 0 0 0;
+    font-size: clamp(0.75rem, 2.5vw, 1rem);
+    white-space: nowrap;
+    color: var(--sage-green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.login-modal-content {
+    background: rgba(20, 30, 30, 0.9);
+    margin: 2rem auto; 
+    padding: 2.5rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    color: var(--text-light);
+    position: relative;
+    backdrop-filter: blur(10px);
+}
+
+.login-form h2 {
+    font-family: 'Playfair Display', serif;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: #fff;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--sage-green);
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: white;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--unibo-red);
+    background: rgba(255,255,255,0.1);
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--unibo-red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.submit-btn:hover {
+    background: #a00b0c;
+}
+
+.glass-footer {
+    margin-top: 3rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.6);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 1.5rem;
+}
+
+/* Keycloak specific error/info messages */
+.alert-error {
+    background: rgba(200, 14, 15, 0.2);
+    border: 1px solid var(--unibo-red);
+    color: #ffcccc;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}

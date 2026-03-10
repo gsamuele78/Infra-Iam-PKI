@@ -1,0 +1,201 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+#
+# Multi-VM Vagrant Sandbox for Infra-Iam-PKI
+#
+# Simulates real production topology: each infra-* component on a dedicated host.
+# Each VM has its own isolated Docker network. Cross-host communication via private net.
+#
+# Network Topology:
+#   192.168.56.10  =>  pki-host   (infra-pki  / Step-CA)
+#   192.168.56.20  =>  iam-host   (infra-iam  / Keycloak)
+#   192.168.56.30  =>  ood-host   (infra-ood  / Open OnDemand)
+#
+# Usage:
+#   vagrant up pki-host           # Start PKI first (others depend on it)
+#   vagrant up iam-host           # Start IAM (waits for PKI fingerprint)
+#   vagrant up ood-host           # Start OOD (builds from deb packages ~15min first time)
+#   vagrant up                    # Start all 3 (PKI must be up before IAM/OOD can initialize)
+#   vagrant rsync                 # Push local changes to all VMs
+#   vagrant ssh pki-host          # SSH into a host
+#   vagrant destroy -f            # Wipe everything
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/ubuntu2204"
+
+  # Shared folder: rsync the full project into each VM
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder "../", "/workspace/Infra-Iam-PKI", type: "rsync",
+    rsync__exclude: [".git/", "sandbox/.vagrant/", "infra-pki/step_data/", "infra-pki/db_data/", "infra-pki/logs/", "infra-iam/logs/"]
+
+  # ============================================================
+  # Shared: Install Docker + Docker Compose Plugin on every VM
+  # ============================================================
+  config.vm.provision "shell", name: "install-docker", inline: <<-SHELL
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y ca-certificates curl gnupg
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+      | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    apt-get update -qq
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    usermod -aG docker vagrant
+    echo "Docker installed: $(docker --version)"
+  SHELL
+
+  # ============================================================
+  # PKI Host: Step-CA on 192.168.56.10
+  # Isolated Docker network: pki-net
+  # Exposes: :80 (public certs/fingerprint), :9000 (CA API, LAN only)
+  # ============================================================
+  config.vm.define "pki-host" do |pki|
+    pki.vm.hostname = "pki-host"
+    pki.vm.network "private_network", ip: "192.168.56.10"
+
+    pki.vm.provider :libvirt do |libvirt|
+      libvirt.driver = "kvm"
+      libvirt.memory = 2048
+      libvirt.cpus   = 2
+    end
+
+    pki.vm.provision "shell", name: "start-pki", inline: <<-SHELL
+      cd /workspace/Infra-Iam-PKI/infra-pki
+
+      # Use sandbox-specific env (test credentials, sandbox IPs)
+      cp .env.sandbox .env
+
+      # Run production compose — no duplication, this IS the production config
+      docker compose build
+      docker compose up -d
+
+      echo ""
+      echo "====================================================="
+      echo " PKI Host Ready (192.168.56.10)"
+      echo " Step-CA Proxy HTTP : http://192.168.56.10/fingerprint/root_ca.fingerprint"
+      echo " Step-CA API        : https://192.168.56.10:9000"
+      echo "====================================================="
+
+      # Run the sandbox health probe
+      cd /workspace/Infra-Iam-PKI/sandbox
+      docker compose -f pki-sandbox.yml up pki-test-probe --abort-on-container-exit || true
+    SHELL
+  end
+
+  # ============================================================
+  # IAM Host: Keycloak + Caddy on 192.168.56.20
+  # Isolated Docker network: iam-net
+  # Depends on pki-host being up and serving the fingerprint via HTTP
+  # ============================================================
+  config.vm.define "iam-host" do |iam|
+    iam.vm.hostname = "iam-host"
+    iam.vm.network "private_network", ip: "192.168.56.20"
+
+    iam.vm.provider :libvirt do |libvirt|
+      libvirt.driver = "kvm"
+      libvirt.memory = 2048
+      libvirt.cpus   = 2
+    end
+
+    iam.vm.provision "shell", name: "start-iam", inline: <<-SHELL
+      cd /workspace/Infra-Iam-PKI/sandbox
+
+      # Use sandbox .env as the base
+      cp /workspace/Infra-Iam-PKI/infra-iam/.env.sandbox .env.iam.tmp
+
+      # Fetch PKI fingerprint from pki-host over the private network
+      echo "Waiting for PKI fingerprint from pki-host (192.168.56.10)..."
+      FINGERPRINT=""
+      for i in $(seq 1 60); do
+        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\\n' || true)
+        if [ -n "$FINGERPRINT" ]; then
+          echo "Got fingerprint: $FINGERPRINT"
+          break
+        fi
+        echo "  Retry $i/60 — PKI not ready yet, waiting 5s..."
+        sleep 5
+      done
+
+      if [ -z "$FINGERPRINT" ]; then
+        echo "ERROR: Could not get PKI fingerprint from pki-host. Is pki-host running and healthy?"
+        exit 1
+      fi
+
+      # Inject fingerprint into the sandbox .env
+      sed -i "s|^FINGERPRINT=.*|FINGERPRINT=$FINGERPRINT|" .env.iam.tmp
+      mv .env.iam.tmp /workspace/Infra-Iam-PKI/infra-iam/.env
+
+      # Start production-equivalent IAM fixture (sandbox compose references production images/builds)
+      docker compose -f /workspace/Infra-Iam-PKI/sandbox/iam-sandbox.yml \
+        --env-file /workspace/Infra-Iam-PKI/infra-iam/.env \
+        up -d
+
+      echo ""
+      echo "====================================================="
+      echo " IAM Host Ready (192.168.56.20)"
+      echo " Keycloak UI  : http://192.168.56.20/"
+      echo " Admin Panel  : http://192.168.56.20/admin"
+      echo "====================================================="
+    SHELL
+  end
+
+  # ============================================================
+  # OOD Host: Open OnDemand on 192.168.56.30
+  # Isolated Docker network: ood-net
+  # Builds from Ubuntu Noble 24.04 deb packages (first build ~15 min)
+  # ============================================================
+  config.vm.define "ood-host" do |ood|
+    ood.vm.hostname = "ood-host"
+    ood.vm.network "private_network", ip: "192.168.56.30"
+
+    # OOD needs more RAM for the Ruby/Rails application + deb build
+    ood.vm.provider :libvirt do |libvirt|
+      libvirt.driver = "kvm"
+      libvirt.memory = 4096
+      libvirt.cpus   = 4
+    end
+
+    ood.vm.provision "shell", name: "start-ood", inline: <<-SHELL
+      cd /workspace/Infra-Iam-PKI/sandbox
+
+      # Use sandbox .env as the base
+      cp /workspace/Infra-Iam-PKI/infra-ood/.env.sandbox .env.ood.tmp
+
+      # Fetch PKI fingerprint from pki-host (same as IAM host does)
+      echo "Waiting for PKI fingerprint from pki-host (192.168.56.10)..."
+      FINGERPRINT=""
+      for i in $(seq 1 60); do
+        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\\n' || true)
+        if [ -n "$FINGERPRINT" ]; then
+          echo "Got fingerprint: $FINGERPRINT"
+          break
+        fi
+        echo "  Retry $i/60 — PKI not ready yet, waiting 5s..."
+        sleep 5
+      done
+
+      if [ -z "$FINGERPRINT" ]; then
+        echo "ERROR: Could not get PKI fingerprint from pki-host."
+        exit 1
+      fi
+
+      sed -i "s|^FINGERPRINT=.*|FINGERPRINT=$FINGERPRINT|" .env.ood.tmp
+      mv .env.ood.tmp /workspace/Infra-Iam-PKI/infra-ood/.env
+
+      echo "Building Open OnDemand from Ubuntu Noble deb packages (first run takes ~15 min)..."
+      docker compose -f /workspace/Infra-Iam-PKI/sandbox/ood-sandbox.yml \
+        --env-file /workspace/Infra-Iam-PKI/infra-ood/.env \
+        up -d --build
+
+      echo ""
+      echo "====================================================="
+      echo " OOD Host Ready (192.168.56.30)"
+      echo " Open OnDemand: http://192.168.56.30/"
+      echo "====================================================="
+    SHELL
+  end
+
+end
