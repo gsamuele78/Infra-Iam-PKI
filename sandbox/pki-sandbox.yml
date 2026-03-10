@@ -1,0 +1,35 @@
+# sandbox/pki-sandbox.yml
+# Production-equivalent PKI fixture for pki-host (192.168.56.10)
+# Uses the production infra-pki/docker-compose.yml directly via --project-directory.
+# This file exists as an explicit documentation of the pki-host deployment context and
+# for any sandbox-specific overrides (e.g. exposing internal ports for testing).
+---
+services:
+  # No service redefinition here — the Vagrantfile runs:
+  #   cd /workspace/Infra-Iam-PKI/infra-pki && docker compose up -d
+  # This file can be used to add sandbox-only monitoring or test utilities:
+  pki-test-probe:
+    image: curlimages/curl:8.11.1
+    container_name: pki-test-probe
+    networks: [ pki-net ]
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        echo '--- PKI Health Check ---';
+        for i in $(seq 1 10); do
+          FP=$(curl -sf http://step-ca-proxy:80/fingerprint/root_ca.fingerprint 2>/dev/null || true);
+          if [ -n \"$FP\" ]; then
+            echo 'Fingerprint endpoint: OK';
+            echo \"Fingerprint: $FP\";
+            break;
+          fi;
+          echo \"Retry $i/10 — waiting for PKI...\";
+          sleep 5;
+        done;
+        echo '--- End PKI Health Check ---'
+      "
+
+networks:
+  pki-net:
+    external: true
+    name: pki-net

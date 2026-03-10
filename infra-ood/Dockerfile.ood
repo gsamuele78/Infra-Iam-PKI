@@ -1,0 +1,64 @@
+# Dockerfile.ood
+# Builds a production-equivalent Open OnDemand container using the official
+# OSC apt packages for Ubuntu Noble 24.04.
+# Reference: https://osc.github.io/ood-documentation/latest/installation/install-software.html
+#
+# NOTE: OOD requires systemd for Apache2 and service management.
+# This image uses an Ubuntu Noble base that supports systemd inside Docker
+# when run with --privileged and /sys/fs/cgroup mounted.
+
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# ----------------------------------------------------------------
+# 1. Install base dependencies
+# ----------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    sudo \
+    libpam-runtime \
+    locales \
+    # mod_auth_openidc dependencies
+    libapache2-mod-auth-openidc \
+    && rm -rf /var/lib/apt/lists/*
+
+# ----------------------------------------------------------------
+# 2. Install OOD from official OSC apt repository (Ubuntu Noble = 24.04)
+# ----------------------------------------------------------------
+RUN wget -O /tmp/ondemand-release-web_4.1.0-noble_all.deb \
+    https://apt.osc.edu/ondemand/4.1/ondemand-release-web_4.1.0-noble_all.deb && \
+    apt-get install -y /tmp/ondemand-release-web_4.1.0-noble_all.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ondemand && \
+    rm -rf /var/lib/apt/lists/* /tmp/*.deb
+
+# ----------------------------------------------------------------
+# 3. Enable all required Apache modules for OOD
+# ----------------------------------------------------------------
+RUN a2enmod rewrite headers ssl proxy proxy_http proxy_wstunnel auth_openidc
+
+# ----------------------------------------------------------------
+# 4. Configure locale
+# ----------------------------------------------------------------
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+
+# ----------------------------------------------------------------
+# 5. Expose ports
+# ----------------------------------------------------------------
+EXPOSE 80 443
+
+# ----------------------------------------------------------------
+# 6. Entrypoint: run OOD ood_portal update then start Apache
+# ----------------------------------------------------------------
+COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["apache2", "-DFOREGROUND"]

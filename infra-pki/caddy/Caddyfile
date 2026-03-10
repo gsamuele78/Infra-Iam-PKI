@@ -21,6 +21,20 @@
 
 :80 {
 	root * /var/www/html
-	file_server
+	
+	@allowed_paths {
+		path /certs/*
+		path /fingerprint/*
+	}
+	
+	handle @allowed_paths {
+		file_server {
+			hide .*
+		}
+	}
+	
+	handle {
+		respond "Access Denied" 403
+	}
 }
 

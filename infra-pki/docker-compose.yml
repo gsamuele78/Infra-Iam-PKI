@@ -22,8 +22,10 @@ services:
       - ./step_data:/home/step
       - ./logs:/opt/logs
       - ./db_data:/db_data
-    # Create log directories and ensure permissions for PUID:PGID on all data
-    command: -c "mkdir -p /home/step/secrets /opt/logs/step-ca /opt/logs/watchtower /opt/logs/caddy /opt/logs/postgres && printf \"%s\" \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs /db_data"
+    # Create all required dirs (incl. fingerprint/) and ensure correct PUID:PGID ownership.
+    # This is the ONLY container allowed to run as root — it is a one-shot init that sets
+    # ownership on bind-mount directories before non-root services start.
+    command: -c "mkdir -p /home/step/secrets /home/step/fingerprint /opt/logs/step-ca /opt/logs/watchtower /opt/logs/caddy /opt/logs/postgres && printf \"%s\" \"${CA_PASSWORD}\" > /home/step/secrets/password && chown -R ${PUID}:${PGID} /home/step /opt/logs /db_data"
 
   postgres:
     image: postgres:15-alpine
@@ -189,6 +191,8 @@ services:
 
   fingerprint-writer:
     image: smallstep/step-cli:0.29.0
+    # Runs as PUID:PGID (non-root). The `init-files` one-shot container pre-creates
+    # fingerprint/ with the correct ownership before this service starts, so no root needed.
     user: "${PUID}:${PGID}"
     networks: [ pki-net ]
     deploy:
@@ -199,15 +203,18 @@ services:
     depends_on:
       step-ca:
         condition: service_healthy
+      init-files:
+        condition: service_completed_successfully
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     volumes:
       - ./step_data:/home/step
-    entrypoint: /bin/sh -c "while [ ! -f /home/step/certs/root_ca.crt ]; do sleep 1; done; step certificate fingerprint /home/step/certs/root_ca.crt > /home/step/fingerprint; echo 'Fingerprint written to step_data/fingerprint'; exit 0"
+    # fingerprint/ was pre-created with PUID:PGID ownership by init-files, so write is safe.
+    entrypoint: /bin/sh -c "while [ ! -f /home/step/certs/root_ca.crt ]; do sleep 1; done; step certificate fingerprint /home/step/certs/root_ca.crt > /home/step/fingerprint/root_ca.fingerprint; echo 'Fingerprint written'; exit 0"
     logging: *default-logging
 
   watchtower:
-    image: nickfedor/watchtower:1.7.1
+    image: containrrr/watchtower:1.7.1
     container_name: pki-watchtower
     networks: [ pki-net ]
     deploy:
