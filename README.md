@@ -1,31 +1,29 @@
-# Infra-Iam-PKI: Certified Infrastructure & Identity
+# Infra-IAM-PKI: Certified Infrastructure & Identity
 
-**Version:** 2.0.0
-**Maintainer:** DevOps Team
+**Version:** 3.0.0
+**Maintainer:** DevOps Team / System Engineering
 
 ## 1. Project Overview
 
-This repository hosts the **Infrastructure-as-Code (IaC)** for the organization's internal Public Key Infrastructure and Identity Management.
+This repository hosts the strict, **Pessimistic Infrastructure-as-Code (IaC)** for the organization's internal Public Key Infrastructure, Identity Management, and HPC Portal. It enforces Zero-Trust principles, Airgap security, and deterministic compute isolation across Docker Compose and Kubernetes deployment targets.
 
-- **Infra-PKI**: Internal Certificate Authority (Step-CA) backed by PostgreSQL.
-- **Infra-IAM**: Single Sign-On (Keycloak) secured by the PKI and integrated with Active Directory.
-- **Automation Scripts**: A robust toolkit for automated host enrollment, internal trust management, and certificate renewal.
+- **Infra-PKI**: Internal Certificate Authority (`step-ca`) backed by PostgreSQL.
+- **Infra-IAM**: Single Sign-On (`Keycloak`) secured by the PKI and integrated with Active Directory.
+- **Infra-OOD**: The user-facing HPC gateway built on Open OnDemand, authenticating strictly via Keycloak OIDC.
+- **AI Constraints**: Built-in AST validation and hard-constraint generation (`.ai/`, `.agents/`) to enforce strict engineering boundaries automatically.
 
 ---
 
 ## 2. Architecture
 
-```
-[Remote Clients] <---> [Caddy Reverse Proxy] <---> [Services]
+```text
+[Remote Clients] <---> [Caddy / Nginx Ingress] <---> [Services]
                                     ^
-                                    |
+                                    | (TLS via PKI, Sec via IAM)
           +-------------------------+-------------------------+
-          |                                                   |
-    [Infra-PKI]                                         [Infra-IAM]
-    (Step-CA + Postgres)                                (Keycloak + Postgres)
-          ^                                                   ^
-          |                                                   |
-    (Root Authority)                                  (Identity Provider)
+          |                         |                         |
+    [Infra-PKI]               [Infra-IAM]               [Infra-OOD]
+   (Step-CA/PG)             (Keycloak/PG/AD)        (Apache/PUN/OIDC)
 ```
 
 ---
@@ -34,119 +32,68 @@ This repository hosts the **Infrastructure-as-Code (IaC)** for the organization'
 
 ```plaintext
 Infra-Iam-PKI/
-├── infra-pki/                  # PKI Service
-│   ├── docker-compose.yml
-│   └── doc/                    # PKI Documentation
-│
-├── infra-iam/                  # IAM Service
-│   ├── docker-compose.yml
-│   └── doc/                    # IAM Documentation
-│
-└── scripts/                    # Automation Toolkit
-    ├── infra-pki/              # Server-side Admin Scripts (generate_token, etc)
-    ├── infra-iam/              # IAM Configuration Scripts
-    └── common/                 # Portable Client Scripts (join_pki.sh)
+├── infra-pki/                  # PKI Service (Docker Compose)
+├── infra-iam/                  # IAM Service (Docker Compose)
+├── infra-ood/                  # Open OnDemand HPC Portal (Docker Compose)
+├── kubernetes-deploy/          # RKE2 Kubernetes Manifests (Production Parity)
+├── sandbox/                    # 3-VM Vagrant Topology for local multi-host testing
+├── scripts/                    # Automation Toolkit (enrollment, renewal, patching)
+├── doc/                        # Architectural Documentation
+├── .ai/                        # Automatic Constraint Generators for AI Coding
+└── .agents/                    # Deterministic AI Checklists ("Skills")
 ```
 
 ---
 
-## 4. Quick Start Guide
+## 4. Deployment Topologies
 
-### 4.1 Deploy Infrastructure
+This repository maintains extreme **Production Parity** across three distinct deployment mechanisms, ensuring zero logical drift whether running locally or in a distributed cluster.
 
-1. **Deploy PKI**:
-    See [Infra-PKI Deployment](doc/infra-pki/DEPLOY.md).
+### 4.1 Kubernetes (RKE2)
 
-    ```bash
-    cd infra-pki && docker compose up -d
-    ```
+The standard production target.
+See `kubernetes-deploy/README.md` for the sequence of `$ kubectl apply -k` commands utilized to launch the PKI, IAM, and OOD isolation namespaces.
 
-2. **Deploy IAM**:
-    See [Infra-IAM Deployment](doc/infra-iam/DEPLOY.md).
-    *Requires PKI to be running.*
+### 4.2 Docker Compose (Legacy / Edge)
 
-    ```bash
-    cd infra-iam && docker compose up -d
-    ```
+For standalone or edge environments lacking a K8s control plane.
 
-### 4.2 Establish Trust (Local Admin)
+1. `cd infra-pki && docker compose up -d`
+2. `cd infra-iam && docker compose up -d`
+3. `cd infra-ood && docker compose up -d`
 
-To manage the infrastructure, your machine must trust the internal Root CA.
+### 4.3 Vagrant Sandbox (Local Validation)
+
+To perform destructive networking tests without risking production.
+See [doc/SANDBOX_TESTING.md](doc/SANDBOX_TESTING.md).
 
 ```bash
-cd scripts/infra-pki
-sudo ./manage_host_trust.sh
-# Select Option 1
+cd sandbox && vagrant up
 ```
 
 ---
 
-## 5. Usage Examples
+## 5. Security & Pessimistic Constraints
 
-### Scenario A: Enrolling a New SSH Host (Automated)
+This repository restricts all code additions using the embedded `.ai/validate.sh` testing pipeline. Before committing, the codebase must pass all **Hard Constraints (HC-01 to HC-14)** defined in `.ai/project.yml`.
 
-You want to onboard a new database server (`db-01`) so you can SSH into it using certificates.
+Notable constraints actively enforced:
 
-**1. On Infra-PKI Server (Admin):**
-Generate a one-time enrollment configuration.
-
-```bash
-./scripts/infra-pki/generate_token.sh
-# Input: db-01
-# Output: db-01_join_pki.env
-```
-
-**2. On Remote Host (db-01):**
-Copy `join_pki.sh` and the `.env` file, then run it.
-
-```bash
-# (Copy files via SCP...)
-sudo ./join_pki.sh ssh-host
-```
-
-*Result: `db-01` now trusts the CA, has a valid SSH Host Certificate, and will auto-renew it weekly.*
-
-### Scenario B: Configuring Infra-IAM Trust
-
-You re-deployed the PKI and need `infra-iam` to trust the new Root CA.
-
-**1. Generate Token/Config on PKI:**
-
-```bash
-./scripts/infra-pki/generate_token.sh
-# Input: infra-iam
-```
-
-**2. Apply on IAM Host:**
-
-```bash
-./scripts/infra-iam/configure_iam_pki.sh /path/to/infra-iam_join_pki.env
-# Updates infra-iam/.env automatically
-```
-
-### Scenario C: Manual Certificate Request
-
-You have a web service and just need a simple TLS certificate.
-
-```bash
-./scripts/infra-pki/get_certificate.sh my-service.example.com
-```
+- **Memory/CPU Caps:** Every container limits compute resources (`deploy.resources.limits`) to prevent Linux OOM cascades.
+- **Idempotent Automation:** Bash scripts execute deterministic state checks (e.g., checksums) rather than triggering noisy container restarts blindly.
+- **Airgap / Zero-Trust:** UI Themes (`bigea-theme.css`) are strictly forbidden from executing outbound tracking calls to external CDNs (like Google Fonts).
+- **Dependency Sandboxing:** Ephemeral utilities (`iam-init`, `fetch-pki-certs`) operate strictly as explicit sidecars passing data securely rather than mounting root `.env` files indiscriminately.
 
 ---
 
 ## 6. Documentation Index
 
-- **Infra-PKI**:
-  - [Overview](doc/infra-pki/OVERVIEW.md)
-  - [Deployment](doc/infra-pki/DEPLOY.md)
-  - [Configuration](doc/infra-pki/CONFIGURATION.md)
-  - [Troubleshooting](doc/infra-pki/TROUBLESHOOTING.md)
-
-- **Infra-IAM**:
-  - [Overview](doc/infra-iam/OVERVIEW.md)
-  - [Deployment](doc/infra-iam/DEPLOY.md)
-  - [Configuration](doc/infra-iam/CONFIGURATION.md)
-  - [Troubleshooting](doc/infra-iam/TROUBLESHOOTING.md)
+- **Infra-PKI**: [Overview](doc/infra-pki/OVERVIEW.md) | [Deploy](doc/infra-pki/DEPLOY.md)
+- **Infra-IAM**: [Overview](doc/infra-iam/OVERVIEW.md) | [Deploy](doc/infra-iam/DEPLOY.md)
+- **Infra-OOD**: [Overview](doc/infra-ood/OVERVIEW.md)
+- **Architecture**:
+  - [Sandbox Testing Guide](doc/SANDBOX_TESTING.md)
+  - [AI Agent Management Constraints](doc/AI_AGENT_MANAGEMENT.md)
 
 ---
-*Generated by Antigravity Assistant*
+> Generated & Maintained by the Antigravity Team
