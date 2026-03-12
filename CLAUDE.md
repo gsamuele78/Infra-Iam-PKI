@@ -28,8 +28,8 @@ COMPOSE FORMAT:
 PINNED VERSIONS (extracted from code — do not override):
   caddy: 2.9.1-alpine
   containrrr/watchtower: 1.7.1
-  infra-ood: latest
-  infra-pki-caddy: latest # Local build, keeping latest for local
+  infra-ood: local
+  infra-pki-caddy: local # Local build
   postgres: 15-alpine
   smallstep/step-ca: 0.29.0
   smallstep/step-cli: 0.29.0
@@ -468,6 +468,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ### 7.6 Operational Workflows (Day-to-Day)
 
 **Workflow A: Enroll a new SSH host**
+
 ```
 [PKI Host] generate_token.sh → produces db-01_join_pki.env
 [Operator] SCP join_pki.sh + db-01_join_pki.env → remote host
@@ -481,6 +482,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow B: Re-establish IAM trust after PKI re-init**
+
 ```
 [PKI Host] generate_token.sh → produces infra-iam_join_pki.env
 [IAM Host] configure_iam_pki.sh /path/to/infra-iam_join_pki.env
@@ -490,6 +492,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow C: Full stack deployment from scratch**
+
 ```
 [PKI Host] configure_pki.sh → set passwords, toggle provisioners
            deploy_pki.sh    → 7-step deploy, waits for healthy
@@ -500,6 +503,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow D: Backup and restore**
+
 ```
 [PKI Host] backup_pki.sh  → /backup/infra-pki/{timestamp}/
                              contains: step_data/, db_dump.sql, .env
@@ -529,22 +533,26 @@ The sandbox is NOT a simplified test harness — it is a **1:1 production-topolo
 The Vagrantfile does the following for each VM (in order):
 
 **Shared provisioner (all VMs):**
+
 1. Install Docker CE + Docker Compose plugin from official Docker apt repo
 2. Add `vagrant` user to `docker` group
 3. rsync the full project from host to `/workspace/Infra-Iam-PKI` (excluding `.git/`, `sandbox/.vagrant/`, `step_data/`, `db_data/`, `logs/`)
 
 **pki-host specific:**
+
 1. `cp .env.sandbox .env` — uses test credentials
 2. `docker compose build && docker compose up -d`
 3. Runs `pki-test-probe` (curl-based health check container on `pki-net`) to verify fingerprint endpoint is serving
 
 **iam-host specific:**
+
 1. Copies `.env.sandbox` as base
 2. **Retry loop (max 60 × 5s = 5 minutes):** `curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint` — waits for PKI to be ready
 3. Injects the fetched FINGERPRINT into `.env` via `sed`
 4. Starts `iam-sandbox.yml` (NOT the production compose — see Section 8.3 for differences)
 
 **ood-host specific:**
+
 1. Same fingerprint fetch retry loop as iam-host
 2. Injects FINGERPRINT into `.env`
 3. Builds `Dockerfile.ood` from Ubuntu Noble packages (~15 min first build)
@@ -666,7 +674,7 @@ These are documented bugs or incomplete areas. Do NOT "fix" them without explici
 ### 8.3 Documentation
 
 - Format: Markdown
-- Code blocks: Always specify language (```bash, ```yaml, ```sql)
+- Code blocks: Always specify language (```bash,```yaml, ```sql)
 - Mermaid: Used for architecture diagrams
 - Admonitions: GitHub-style `> [!WARNING]`, `> [!IMPORTANT]`, `> [!NOTE]`
 - Paths: Always relative to repo root or use `$SCRIPT_DIR` convention
@@ -770,6 +778,7 @@ Claude excels at step-by-step reasoning. For this project, ALWAYS use chain-of-t
 ### Tool Usage
 
 When using Claude's computer/file tools:
+
 - Read the target file BEFORE editing it.
 - Use `str_replace` for surgical edits, not full file rewrites.
 - Validate compose files with `docker compose config` after editing.
@@ -923,33 +932,43 @@ Check against ALL constraints in agents.md Section 4, with special attention to:
 Claude sometimes makes these mistakes on this specific codebase:
 
 ### 1. Suggesting `docker secrets` (Swarm-mode feature)
+
 This project uses standalone Docker Compose, NOT Docker Swarm. `docker secrets` don't work here. Use file-based secrets with bind mounts.
 
 ### 2. Recommending `environment_file` over `env_file`
+
 Both work but the project consistently uses `env_file:` syntax. Don't introduce `environment_file:`.
 
 ### 3. Over-engineering with Docker multi-stage builds
+
 The Dockerfiles here are intentionally simple (single-stage). step-cli and step-ca images are used directly. Only Caddy has a multi-stage build (builder pattern for the L4 plugin).
 
 ### 4. Adding `version: "3.x"` to compose files
+
 Compose v2 doesn't need the `version` key. The project omits it intentionally.
 
 ### 5. Using `docker-compose` (hyphenated) instead of `docker compose` (space)
+
 The project targets Docker Compose v2 plugin syntax (`docker compose`), not the legacy standalone binary.
 
 ### 6. Suggesting Traefik or Nginx instead of Caddy
+
 Caddy is the chosen reverse proxy for both L4 (PKI) and L7 (IAM). Do not suggest replacing it unless explicitly asked.
 
 ### 7. Recommending `init: true` in compose
+
 The project uses explicit init containers instead of Docker's `init:` flag. The init containers do more than PID 1 reaping — they handle permissions, cert fetching, and directory creation.
 
 ### 8. Forgetting the Docker bridge CIDR in ALLOWED_IPS
+
 When health checks or deploy scripts run from the host, they route through the Docker bridge gateway. If `172.18.0.0/16` (or equivalent) is not in `ALLOWED_IPS`, Caddy L4 blocks the connection silently.
 
 ### 9. Editing a script without checking its callers
+
 Scripts have hidden coupling. See `agents.md` Section 7.1 for the dependency graph. For example, modifying the output format of `generate_token.sh` will break `configure_iam_pki.sh` which parses its output file with `grep + cut`.
 
 ### 10. Treating the sandbox as a simplified mock
+
 The sandbox uses the **real production compose** for PKI and builds OOD from the **real Dockerfile.ood**. Only IAM has a dedicated sandbox compose. Changes to production compose files directly affect sandbox behavior. See `agents.md` Section 8.3 for the exact differences.
 
 ---
