@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+shopt -s nullglob
 
 # .ai/generate.sh
 # ══════════════════════════════════════════════════════════════
@@ -26,6 +27,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AI_DIR="$SCRIPT_DIR"
+
+# Verify required core dependencies (Fail Fast)
+for cmd in awk sed grep find xargs tr cut date wc cat; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo -e "[\033[0;31m✗ FAIL\033[0m] Missing required dependency: $cmd"; exit 1; }
+done
 
 CHECK_MODE=false
 DRY_RUN=false

@@ -1,8 +1,10 @@
 # Open OnDemand Configuration for BiGeA / R-studioConf Integration
 ---
+servername: '192.168.56.30'
 # Authenticate against the Keycloak (infra-iam) stack using OpenID Connect
 auth:
-  - 'AuthType openidc'
+  - 'AuthType openid-connect'
+  - 'AuthName "Open OnDemand"'
   - 'Require valid-user'
 
 # OIDC Apache mod_auth_openidc configurations

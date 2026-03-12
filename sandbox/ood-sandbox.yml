@@ -54,7 +54,8 @@ services:
       - SETGID
       - DAC_OVERRIDE
     healthcheck:
-      test: [ "CMD-SHELL", "curl -sf http://localhost/oidc || exit 1" ]
+      # Expect a 302 redirect to OIDC Provider login when accessing the dashboard
+      test: [ "CMD-SHELL", "curl -sf -o /dev/null -w '%{http_code}' http://localhost/pun/sys/dashboard | grep '302' || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3

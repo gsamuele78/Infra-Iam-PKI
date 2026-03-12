@@ -12,6 +12,10 @@ fi
 
 # Always patch to ensure environment variables are up to date
 if [ -f "$CA_CONFIG" ]; then
+    if grep -q "postgresql" "$CA_CONFIG"; then
+        echo "ca.json is already patched to use PostgreSQL. Skipping."
+        exit 0
+    fi
     echo "Patching ca.json to enforce PostgreSQL usage..."
     
     # Verify jq is available

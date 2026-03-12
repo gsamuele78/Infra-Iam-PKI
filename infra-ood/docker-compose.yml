@@ -13,11 +13,13 @@ services:
           cpus: '0.2'
     command: >
       -c "mkdir -p /certs /data/ood_config /public && chown -R 1000:1000 /certs /data/ood_config /public && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt"
+    environment:
+      - CA_URL=${CA_URL:-https://192.168.56.10:9000}
+      - FINGERPRINT=${FINGERPRINT}
     volumes:
       - ./certs:/certs
       - ./data:/data
       - ./scripts:/scripts
-      - .env:/app/.env
 
   ood-portal:
     build:

@@ -18,6 +18,8 @@ HARD RULES (violating ANY makes output unusable):
 10. Deploy scripts MUST exit 1 if chown/permission setup fails
 11. No external CDN calls for fonts or CSS in UI themes
 12. Use jq for JSON manipulation — never sed/awk on JSON
+13. Scripts MUST explicitly assert that required external binaries (jq, curl, openssl, etc) are present using `command -v`
+14. Scripts MUST use `trap` to clean up temporary files or state on EXIT/ERR
 
 COMPOSE FORMAT:
 - Compose v2: NO "version:" key

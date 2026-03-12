@@ -101,6 +101,16 @@ constraints:
     rationale: "sed breaks on special chars, no schema validation."
     validate: "no_sed_on_json"
 
+  - id: "HC-13"
+    rule: "Scripts MUST explicitly assert that required external binaries (jq, curl, openssl, etc) are present using `command -v`"
+    rationale: "Fail fast. Implicit dependencies cause silent corruption deep in execution if a tool is missing."
+    validate: "scripts_have_dependency_assertions"
+
+  - id: "HC-14"
+    rule: "Scripts MUST use `trap` to clean up temporary files or state on EXIT/ERR"
+    rationale: "Ensures no orphaned files, zombie processes, or locked state remain if a script crashes or `set -e` triggers."
+    validate: "scripts_use_traps_for_cleanup"
+
 # ──────────────────────────────────────────────────────────────
 # COMPOSE FORMAT RULES
 # ──────────────────────────────────────────────────────────────

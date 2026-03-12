@@ -33,15 +33,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------
 RUN wget -O /tmp/ondemand-release-web_4.1.0-noble_all.deb \
     https://apt.osc.edu/ondemand/4.1/ondemand-release-web_4.1.0-noble_all.deb && \
-    apt-get install -y /tmp/ondemand-release-web_4.1.0-noble_all.deb && \
+    apt-get install -y --no-install-recommends /tmp/ondemand-release-web_4.1.0-noble_all.deb && \
     apt-get update && \
-    apt-get install -y --no-install-recommends ondemand && \
+    apt-get install -y --no-install-recommends 'ondemand=4.1.*' && \
     rm -rf /var/lib/apt/lists/* /tmp/*.deb
 
 # ----------------------------------------------------------------
-# 3. Enable all required Apache modules for OOD
+# 3. Enable all required Apache modules for OOD and disable default site
 # ----------------------------------------------------------------
-RUN a2enmod rewrite headers ssl proxy proxy_http proxy_wstunnel auth_openidc
+RUN a2dissite 000-default && \
+    a2enmod rewrite headers ssl proxy proxy_http proxy_wstunnel auth_openidc
 
 # ----------------------------------------------------------------
 # 4. Configure locale

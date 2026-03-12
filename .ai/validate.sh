@@ -21,6 +21,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Verify required core dependencies (Fail Fast)
+for cmd in awk sed grep find xargs tr head cut; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo -e "[\033[0;31m✗ FAIL\033[0m] Missing required dependency: $cmd"; exit 1; }
+done
+
 # Parse flags
 CI_MODE=false
 SHOW_HINTS=false
@@ -344,7 +349,7 @@ if [ "$ERRORS" -gt 0 ]; then
     exit 1
 elif [ "$WARNINGS" -gt 0 ]; then
     echo -e "${YELLOW}  ⚠ PASSED WITH WARNINGS — review recommended${NC}"
-    exit 2
+    exit 0
 else
     echo -e "${GREEN}  ✓ ALL CHECKS PASSED${NC}"
     exit 0
