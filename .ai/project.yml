@@ -153,6 +153,12 @@ script_categories:
       - "scripts/infra-iam/configure_iam.sh"
       - "scripts/infra-ood/deploy_ood.sh"
       - "scripts/infra-ood/reset_ood.sh"
+      - "infra-rstudio/deploy.sh"
+      - "scripts/infra-rstudio/02_configure_time_sync.sh"
+      - "scripts/infra-rstudio/03_install_secure_access.sh"
+      - "scripts/infra-rstudio/10_join_domain_sssd.sh"
+      - "scripts/infra-rstudio/11_join_domain_samba.sh"
+      - "scripts/infra-rstudio/12_lib_kerberos_setup.sh"
       - "scripts/common/maintenance_docker.sh"
 
   client_portable:
@@ -251,3 +257,9 @@ sandbox:
       cpus: 4
       compose: "sandbox/ood-sandbox.yml"
       note: "Builds real Dockerfile.ood — first build ~15min"
+    - name: "rstudio-host"
+      ip: "192.168.56.40"
+      ram: 4096
+      cpus: 4
+      compose: "sandbox/rstudio-sandbox.yml"
+      note: "Tests RStudio SSO E2E flow with oauth2-proxy integration"

@@ -27,11 +27,17 @@ COMPOSE FORMAT:
 - Always: deploy, healthcheck, logging, labels, depends_on
 
 PINNED VERSIONS (extracted from code — do not override):
+  ${OLLAMA_AI_IMAGE: -botanical-ai-ollama:v0.1.28}
+  ${PORTAL_NGINX_IMAGE: -botanical-portal-nginx:v1.0.0}
+  ${RSTUDIO_SAMBA_IMAGE: -rstudio-botanical-samba:v1.0.0}
+  ${RSTUDIO_SSSD_IMAGE: -rstudio-botanical-sssd:v1.0.0}
+  ${TELEMETRY_API_IMAGE: -botanical-telemetry-api:v1.0.0}
   caddy: 2.9.1-alpine
   containrrr/watchtower: 1.7.1
   infra-ood: local
   infra-pki-caddy: local # Local build
   postgres: 15-alpine
+  quay.io/oauth2-proxy/oauth2-proxy: v7.6.0
   smallstep/step-ca: 0.29.0
   smallstep/step-cli: 0.29.0
   tecnativa/docker-socket-proxy: 0.3.0

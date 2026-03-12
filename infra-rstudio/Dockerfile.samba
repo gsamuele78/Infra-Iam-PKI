@@ -1,0 +1,67 @@
+# Dockerfile.samba - RStudio with Samba/Winbind Passthrough
+FROM rocker/geospatial:latest
+
+LABEL maintainer="docker-deploy-botanical-samba"
+
+# 1. Install System Dependencies & Winbind Client & TTYD
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    python3-launchpadlib \
+    samba winbind libpam-winbind libnss-winbind krb5-user \
+    nano iputils-ping \
+    gettext-base \
+    ttyd xterm curl \
+    r-cran-bspm python3-bspm \
+    && add-apt-repository -y ppa:c2d4u.team/c2d4u4.0+ \
+    && apt-get update \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 2. Configure BSPM
+RUN echo "bspm::enable()" >> /usr/local/lib/R/etc/Rprofile.site && \
+    echo "%domain_users ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt-mark, /usr/bin/dpkg, /usr/lib/R/site-library/bspm/service/bspm.py" > /etc/sudoers.d/99-bspm-domain-users && \
+    chmod 0440 /etc/sudoers.d/99-bspm-domain-users
+
+# 3. Install Botanical Packages
+COPY scripts/install_botanical_packages.R /rocker_scripts/install_botanical_packages.R
+RUN Rscript /rocker_scripts/install_botanical_packages.R
+
+# 4. Copy Scripts & Configs
+COPY scripts /scripts
+COPY lib /lib
+RUN chmod +x /scripts/*.sh
+
+# 5. Copy Templates
+COPY templates /etc/docker-templates
+
+# 5. TTYD Setup & PKI Trust (Step-CLI)
+# Install dependencies for step-cli installation (wget, tar are usually present but ensure)
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+# Install Step CLI
+RUN wget -q -O step.tar.gz https://github.com/smallstep/cli/releases/download/v0.24.4/step_linux_0.24.4_amd64.tar.gz && \
+    tar -xf step.tar.gz && \
+    mv step_0.24.4/bin/step /usr/local/bin/ && \
+    rm -rf step.tar.gz step_0.24.4
+
+COPY scripts/pki /scripts/pki
+RUN chmod +x /scripts/pki/*.sh
+
+COPY scripts/manage_pki_trust.sh /usr/local/bin/manage_pki_trust.sh
+RUN chmod +x /usr/local/bin/manage_pki_trust.sh
+
+COPY scripts/ttyd_login_wrapper.sh /usr/local/bin/ttyd_login_wrapper.sh
+RUN chmod +x /usr/local/bin/ttyd_login_wrapper.sh
+# Configure S6 service for TTYD
+RUN mkdir -p /etc/services.d/ttyd
+COPY templates/ttyd_run.template /etc/services.d/ttyd/run
+RUN chmod +x /etc/services.d/ttyd/run
+
+# 6. Entrypoint
+COPY scripts/entrypoint_rstudio.sh /usr/local/bin/entrypoint_rstudio.sh
+RUN chmod +x /usr/local/bin/entrypoint_rstudio.sh
+
+# Environment settings
+ENV AUTH_BACKEND=samba
+
+ENTRYPOINT ["/usr/local/bin/entrypoint_rstudio.sh"]
+CMD ["/init"]

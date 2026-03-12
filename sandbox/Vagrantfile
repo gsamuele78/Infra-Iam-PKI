@@ -401,4 +401,74 @@ Vagrant.configure("2") do |config|
     end
   end
 
+  # ============================================================
+  # RStudio Host: OIDC Sandbox on 192.168.56.40
+  # ============================================================
+  config.vm.define "rstudio-host" do |rst|
+    rst.vm.hostname = "rstudio-host"
+    rst.vm.network "private_network", ip: "192.168.56.40"
+
+    rst.vm.provider :libvirt do |libvirt|
+      libvirt.driver = "kvm"
+      libvirt.memory = 4096
+      libvirt.cpus   = 4
+    end
+
+    rst.vm.provision "shell", name: "start-rstudio", inline: logged_shell("rstudio-host", "start-rstudio", <<~'INNER')
+      set -euo pipefail
+      
+      echo "[1/4] Checking sandbox .env..."
+      cat /workspace/Infra-Iam-PKI/infra-rstudio/.env.sandbox
+
+      echo "[2/4] Fetching PKI fingerprint from pki-host (192.168.56.10)..."
+      FINGERPRINT=""
+      for i in $(seq 1 60); do
+        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\n' || true)
+        if [ -n "$FINGERPRINT" ]; then
+          echo "  Got fingerprint at attempt $i: $FINGERPRINT"
+          break
+        fi
+        echo "  Retry $i/60 — PKI not ready yet, waiting 5s..."
+        sleep 5
+      done
+
+      if [ -z "$FINGERPRINT" ]; then
+        echo "ERROR: Could not get PKI fingerprint from pki-host."
+        exit 1
+      fi
+
+      echo "[3/4] Fetching internal root CA via manage_pki_trust.sh proxy..."
+      mkdir -p /workspace/Infra-Iam-PKI/infra-rstudio/shared-certs
+      curl -sfk https://192.168.56.10:9000/roots.pem -o /workspace/Infra-Iam-PKI/infra-rstudio/shared-certs/step-ca-root.crt
+
+      echo "[4/4] Starting RStudio Sandbox Profile (sssd)..."
+      cd /workspace/Infra-Iam-PKI
+      docker compose -f sandbox/rstudio-sandbox.yml --env-file infra-rstudio/.env.sandbox --profile sssd up -d --build
+
+      echo "Waiting for RStudio portal to become healthy (max 120s)..."
+      for i in $(seq 1 24); do
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' nginx_portal 2>/dev/null || echo "starting")
+        echo "  Attempt $i/24 — nginx_portal health: $STATUS"
+        if [ "$STATUS" = "healthy" ]; then break; fi
+        sleep 5
+      done
+
+      echo "Docker service status:"
+      docker compose -f sandbox/rstudio-sandbox.yml ps
+
+      echo "====================================================="
+      echo " RStudio Host Ready (192.168.56.40)"
+      echo " RStudio Portal: https://192.168.56.40:8443/"
+      echo "====================================================="
+    INNER
+    
+    rst.trigger.after :provision do |t|
+      t.name = "pull-logs-rstudio"
+      t.info = "Pulling provisioning logs from rstudio-host → sandbox/logs/rstudio-host/"
+      t.run = {
+        inline: "./pull-logs.sh rstudio-host"
+      }
+    end
+  end
+
 end
