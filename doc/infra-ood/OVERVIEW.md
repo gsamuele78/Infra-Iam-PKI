@@ -36,4 +36,4 @@ The visual presentation of Open OnDemand has been heavily customized to match th
 - A dedicated CSS file (`bigea-theme.css`) is injected into the OOD portal via `ood_portal.yml`.
 - Implements the academic **Unibo Red** palette.
 - Replaces standard bootstrap panels with modern, premium **Glassmorphism** overlays matching the Keycloak SSO login experience.
-- Implements the modern web typography (`Inter`) required by the PRD.
+- Implements a strict `system-ui` typography stack, explicitly avoiding external CDNs (like Google Fonts) to guarantee Zero-Trust / Airgap compliance.
