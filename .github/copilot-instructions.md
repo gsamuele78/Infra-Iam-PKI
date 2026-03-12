@@ -27,8 +27,8 @@ COMPOSE FORMAT:
 PINNED VERSIONS (extracted from code — do not override):
   caddy: 2.9.1-alpine
   containrrr/watchtower: 1.7.1
-  infra-ood: latest
-  infra-pki-caddy: latest # Local build, keeping latest for local
+  infra-ood: local
+  infra-pki-caddy: local # Local build
   postgres: 15-alpine
   smallstep/step-ca: 0.29.0
   smallstep/step-cli: 0.29.0

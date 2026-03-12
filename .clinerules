@@ -423,6 +423,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ### 7.6 Operational Workflows (Day-to-Day)
 
 **Workflow A: Enroll a new SSH host**
+
 ```
 [PKI Host] generate_token.sh → produces db-01_join_pki.env
 [Operator] SCP join_pki.sh + db-01_join_pki.env → remote host
@@ -436,6 +437,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow B: Re-establish IAM trust after PKI re-init**
+
 ```
 [PKI Host] generate_token.sh → produces infra-iam_join_pki.env
 [IAM Host] configure_iam_pki.sh /path/to/infra-iam_join_pki.env
@@ -445,6 +447,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow C: Full stack deployment from scratch**
+
 ```
 [PKI Host] configure_pki.sh → set passwords, toggle provisioners
            deploy_pki.sh    → 7-step deploy, waits for healthy
@@ -455,6 +458,7 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 ```
 
 **Workflow D: Backup and restore**
+
 ```
 [PKI Host] backup_pki.sh  → /backup/infra-pki/{timestamp}/
                              contains: step_data/, db_dump.sql, .env
@@ -484,22 +488,26 @@ The sandbox is NOT a simplified test harness — it is a **1:1 production-topolo
 The Vagrantfile does the following for each VM (in order):
 
 **Shared provisioner (all VMs):**
+
 1. Install Docker CE + Docker Compose plugin from official Docker apt repo
 2. Add `vagrant` user to `docker` group
 3. rsync the full project from host to `/workspace/Infra-Iam-PKI` (excluding `.git/`, `sandbox/.vagrant/`, `step_data/`, `db_data/`, `logs/`)
 
 **pki-host specific:**
+
 1. `cp .env.sandbox .env` — uses test credentials
 2. `docker compose build && docker compose up -d`
 3. Runs `pki-test-probe` (curl-based health check container on `pki-net`) to verify fingerprint endpoint is serving
 
 **iam-host specific:**
+
 1. Copies `.env.sandbox` as base
 2. **Retry loop (max 60 × 5s = 5 minutes):** `curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint` — waits for PKI to be ready
 3. Injects the fetched FINGERPRINT into `.env` via `sed`
 4. Starts `iam-sandbox.yml` (NOT the production compose — see Section 8.3 for differences)
 
 **ood-host specific:**
+
 1. Same fingerprint fetch retry loop as iam-host
 2. Injects FINGERPRINT into `.env`
 3. Builds `Dockerfile.ood` from Ubuntu Noble packages (~15 min first build)
@@ -621,7 +629,7 @@ These are documented bugs or incomplete areas. Do NOT "fix" them without explici
 ### 8.3 Documentation
 
 - Format: Markdown
-- Code blocks: Always specify language (```bash, ```yaml, ```sql)
+- Code blocks: Always specify language (```bash,```yaml, ```sql)
 - Mermaid: Used for architecture diagrams
 - Admonitions: GitHub-style `> [!WARNING]`, `> [!IMPORTANT]`, `> [!NOTE]`
 - Paths: Always relative to repo root or use `$SCRIPT_DIR` convention
