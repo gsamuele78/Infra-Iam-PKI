@@ -34,7 +34,7 @@ metadata:
 data:
   bigea-theme.css: |
     /* BiGeA Department Custom Tailwind/CSS overrides for Open OnDemand */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    /* Removed external CDN for Airgap security */
 
     :root {
       --unibo-red: #C80E0F;
@@ -44,7 +44,7 @@ data:
     }
 
     body {
-      font-family: 'Inter', sans-serif !important;
+      font-family: system-ui, -apple-system, sans-serif !important;
       background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end)) !important;
       background-attachment: fixed !important;
       color: #F3F4F6 !important;

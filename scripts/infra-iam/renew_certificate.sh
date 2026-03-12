@@ -56,5 +56,5 @@ else
     step ca renew "$CRT_FILE" "$KEY_FILE" \
         --ca-url "$CA_URL" \
         $FINGERPRINT_ARG \
-        --force 2>/dev/null || echo "Certificate not yet ready for renewal or renewal failed."
+        --force 2>/dev/null || { echo "Certificate not yet ready for renewal or renewal failed."; exit 1; }
 fi

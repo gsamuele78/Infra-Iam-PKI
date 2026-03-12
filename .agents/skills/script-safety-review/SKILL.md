@@ -9,9 +9,11 @@ You are reviewing a shell script for the Infra-IAM-PKI project.
 
 ## Mandatory Checks
 
-### 1. Error Handling (HC-03)
+### 1. Error Handling & Robustness (HC-03, HC-13, HC-14)
 - Second line MUST be `set -euo pipefail`
 - Shebang MUST be `#!/bin/bash`
+- **Dependency Assertion (HC-13)**: Must explicitly verify required external binaries via `command -v <pkg> >/dev/null 2>&1 || exit 1`.
+- **Deterministic Cleanup (HC-14)**: Must use `trap 'rm -rf /tmp/...' EXIT ERR` when managing temporary files.
 
 ### 2. Secret Safety (HC-04)
 - Passwords MUST be written to files via `printf "%s" "$VAR" > file`
