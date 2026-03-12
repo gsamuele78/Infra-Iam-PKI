@@ -1,3 +1,18 @@
+/* UI-003: Bundle Inter locally for airgap support */
+/* Download from: https://fonts.google.com/specimen/Inter */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  src: url(../fonts/Inter-Regular.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  src: url(../fonts/Inter-SemiBold.woff2) format('woff2');
+}
+
 :root {
     --primary-green: #2F4F4F;
     --sage-green: #8FBC8F;

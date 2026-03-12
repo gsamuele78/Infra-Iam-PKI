@@ -1,0 +1,278 @@
+# FIX-01: Definito l'anchor YAML per il logging centralizzato.
+# Era referenziato ovunque con *default-logging ma mai dichiarato → YAML parse error.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # FIX-13: Aggiunto docker-socket-proxy mancante.
+  # Sia iam-init che watchtower usano DOCKER_HOST=tcp://docker-socket-proxy:2375
+  # ma il servizio non era definito → connection refused a runtime.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: iam-socket-proxy
+    restart: unless-stopped
+    networks: [ iam-net ]
+    environment:
+      CONTAINERS: 1   # permette solo docker restart/inspect
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    logging: *default-logging
+
+  # FIX-06: iam-init separato in due servizi distinti:
+  #   - iam-init     : one-shot, fetch del certificato PKI iniziale (service_completed_successfully)
+  #   - iam-renewer  : loop di rinnovo certificato (long-running, restart unless-stopped)
+  # Il problema originale: iam-init era un while-true loop ma db/keycloak avevano
+  # depends_on: service_completed_successfully → non sarebbero mai partiti.
+  iam-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.init
+    container_name: iam-init
+    user: root
+    restart: "no"
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    # FIX-02: Rimosso il secondo blocco labels duplicato (era definito due volte).
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    environment:
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+    volumes:
+      - iam_certs:/certs
+      - ../scripts:/scripts:ro
+    entrypoint: /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt
+    logging: *default-logging
+
+  iam-renewer:
+    build:
+      context: .
+      # FIX-19: Corretto dockerfile da Dockerfile.init a Dockerfile.renewer.
+      # Dockerfile.renewer installa docker-cli (necessario per `docker restart iam-keycloak`).
+      # Dockerfile.init non ha docker-cli → il comando docker restart fallirebbe silenziosamente.
+      dockerfile: Dockerfile.renewer
+    container_name: iam-renewer
+    user: root
+    restart: unless-stopped   # FIX-05: restart policy aggiunta (originale non ne aveva)
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    entrypoint: /bin/sh
+    # FIX-03: Rimosso il `done"` duplicato alla fine del command.
+    # FIX-04: Sostituiti i double quotes dentro l'echo con single quotes
+    #         per evitare il YAML parse error nel blocco `>`.
+    command: >
+      -c "while true; do
+        echo 'Checking certificates...' &&
+        if /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key; then
+          echo 'Certificate renewed, restarting Keycloak...' &&
+          docker restart iam-keycloak;
+        else
+          echo 'No renewal needed or renewal failed.';
+        fi;
+        sleep 86400;
+      done"
+    environment:
+      - STEP_TOKEN_FILE=/run/secrets/step_token
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    volumes:
+      - iam_certs:/certs
+      - ../scripts:/scripts:ro
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+      docker-socket-proxy:
+        condition: service_started
+    logging: *default-logging
+
+  db:
+    image: postgres:15-alpine
+    container_name: iam-db
+    # FIX-16: RIMOSSO user: "${PUID}:${PGID}" (era "1000:1000")
+    # Il docker-entrypoint.sh di postgres:alpine richiede di partire come root (uid 0)
+    # per inizializzare /var/lib/postgresql/data (chown → uid 70 postgres) e poi fare
+    # exec gosu postgres. Con user: "1000:1000" il container partiva già come uid 1000,
+    # saltava l'init, tentava di scrivere in una directory owned da uid 70 → EPERM
+    # → pg_isready falliva → healthcheck unhealthy → keycloak non partiva mai.
+    # La gestione dell'uid è interna all'immagine postgres: non va overridata.
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - iam_db_data:/var/lib/postgresql/data
+      # FIX-17: Montato postgresql.conf presente in repo ma mai agganciato.
+      # Il file contiene tuning specifico per workload Keycloak (shared_buffers, work_mem, ecc).
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [ iam-net ]
+    # FIX-06: depends_on corretto: ora dipende da iam-init (one-shot) non dal loop.
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  keycloak:
+    build:
+      context: .
+      dockerfile: Dockerfile.keycloak
+      # FIX-18: Aggiunto args KC_VERSION — il Dockerfile aveva ARG KC_VERSION=25.0.0
+      # ma il commento nel compose citava 26.0.7. Senza args esplicito partiva la 25.
+      args:
+        KC_VERSION: "26.0.7"
+    container_name: iam-keycloak
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+        reservations:
+          memory: 1024M
+          cpus: '0.5'
+    command: start --optimized
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db/keycloak?ssl=true&sslmode=verify-ca&sslrootcert=/certs/root_ca.crt
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_HOSTNAME: ${DOMAIN_SSO}
+      KC_PROXY: edge
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1536m -XX:MaxMetaspaceSize=256m"
+    volumes:
+      # FIX-14: KC_DB_URL referenziava /certs/internal_ca.crt ma non era montato.
+      # Corretto: il path ora è /certs/root_ca.crt (coerente con il volume iam_certs).
+      - iam_certs:/certs:ro
+      - ./themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea:ro
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [ iam-net ]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.9.1-alpine
+    container_name: iam-proxy
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./.Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - iam_certs:/etc/ssl/certs/ca-bundle:ro
+    healthcheck:
+      # FIX-07: Rimosso "CMD" dalla lista (non compatibile con CMD-SHELL nello stesso test).
+      # FIX-08: Corretta la stringa: aggiunta " di chiusura, rimosso ] spurio finale.
+      test: [ "CMD-SHELL", "curl -sf http://localhost:80 -o /dev/null || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks: [ iam-net ]
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+      # FIX-09: Aggiunto depends_on keycloak mancante.
+      keycloak:
+        condition: service_healthy
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: iam-watchtower
+    restart: unless-stopped
+    # FIX-10: Rimosso il secondo blocco environment duplicato.
+    # FIX-11: Corretta WATCHTOWER_NO_RESTART (il :1.7.1 era il tag immagine finito nell'env var).
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+      - DOCKER_API_VERSION=1.44
+      - WATCHTOWER_NO_RESTART=true
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    # FIX-12: Aggiunto networks mancante → watchtower non raggiungeva docker-socket-proxy.
+    networks: [ iam-net ]
+    volumes:
+      - ./logs/watchtower:/var/log/watchtower
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    command: --interval 86400 --cleanup --label-enable
+    logging: *default-logging
+
+networks:
+  iam-net:
+    name: iam-net
+
+# FIX-15: Aggiunta sezione volumes top-level mancante.
+# Senza questa dichiarazione Docker Compose tratta i volumi come bind mount locali
+# e fallisce se la directory non esiste già sul host.
+volumes:
+  iam_db_data:
+  iam_certs:
+  caddy_data:

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 CA_CONFIG="/home/step/config/ca.json"
 TEMP_CONFIG="/home/step/config/ca.json.tmp"
@@ -21,9 +21,6 @@ if [ -f "$CA_CONFIG" ]; then
     fi
 
     # DEBUG: Print variables to logs
-    echo "DEBUG: PGUSER='${PGUSER}'"
-    echo "DEBUG: PGDATABASE='${PGDATABASE}'"
-    echo "DEBUG: PGPASSWORD is set? (len=${#PGPASSWORD})"
 
     # Update configuration using jq
     # DSN format: postgresql://user:password@host:port/dbname?sslmode=disable
@@ -44,7 +41,6 @@ if [ -f "$CA_CONFIG" ]; then
          "database": $db
        }' "$CA_CONFIG" > "$TEMP_CONFIG"
 
-    echo "DEBUG: Generated DSN: $DSN"
 
     # Verify and replace
     if [ -s "$TEMP_CONFIG" ]; then

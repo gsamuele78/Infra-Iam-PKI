@@ -1,7 +1,7 @@
 #!/bin/bash
 # backup_pki.sh - Backup PKI Data and Configuration
 
-set -e
+set -euo pipefail
 
 # Configuration
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../infra-pki" && pwd)"

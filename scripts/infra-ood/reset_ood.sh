@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # reset_ood.sh
 # Purpose: Completely reset the Infra-OOD environment (Stop containers & Wipe Data)

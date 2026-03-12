@@ -217,8 +217,8 @@ fi
 # Check fingerprint
 echo ""
 echo "Checking fingerprint..."
-if [ -f "$PKI_DIR/step_data/fingerprint" ]; then
-    FINGERPRINT=$(cat "$PKI_DIR/step_data/fingerprint")
+if [ -f "$PKI_DIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint" ]; then
+    FINGERPRINT=$(cat "$PKI_DIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint")
     echo -e "${GREEN}✓ Fingerprint: $FINGERPRINT${NC}"
 else
     echo -e "${YELLOW}⚠ Fingerprint file not found yet${NC}"
@@ -244,7 +244,7 @@ echo "  CA Health: https://localhost:9000/health"
 echo "  CA Roots:  https://localhost:9000/roots.pem"
 echo ""
 echo "Important files:"
-echo "  Fingerprint: $PKI_DIR/step_data/fingerprint"
+echo "  Fingerprint: $PKI_DIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint"
 echo "  Root CA:     $PKI_DIR/step_data/certs/root_ca.crt"
 echo "  Logs:        $PKI_DIR/logs/"
 echo ""
@@ -254,9 +254,11 @@ echo "  2. View logs: cd $PKI_DIR && docker compose logs -f"
 echo "  3. Generate token: $SCRIPT_DIR/generate_token.sh"
 echo ""
 
-if [ -f "$PKI_DIR/step_data/fingerprint" ]; then
+if [ -f "$PKI_DIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint" ]; then
     echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
 else
     echo -e "${YELLOW}⚠️  Deployment completed but fingerprint not yet available${NC}"
-    echo "   Wait a few seconds and check: cat $PKI_DIR/step_data/fingerprint"
+    echo "   Wait a few seconds and check: cat $PKI_DIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint"
 fi
+# SEC-001: Secure .env permissions on deploy
+chmod 600 .env 2>/dev/null || true

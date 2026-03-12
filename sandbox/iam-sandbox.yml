@@ -10,7 +10,6 @@ services:
     image: postgres:15-alpine
     container_name: iam-db
     restart: unless-stopped
-    user: "1000:1000"
     networks: [ iam-net ]
     environment:
       POSTGRES_DB: keycloak
@@ -34,6 +33,7 @@ services:
       context: ../infra-iam
       dockerfile: Dockerfile.init
     container_name: iam-init
+    user: root
     restart: on-failure:5
     networks: [ iam-net ]
     environment:
@@ -49,7 +49,11 @@ services:
           memory: 128M
 
   iam-keycloak:
-    image: quay.io/keycloak/keycloak:26.0.7
+    build:
+      context: ../infra-iam
+      dockerfile: Dockerfile.keycloak
+      args:
+        KC_VERSION: "26.0.7"
     container_name: iam-keycloak
     restart: unless-stopped
     networks: [ iam-net ]
@@ -62,6 +66,7 @@ services:
       KC_HOSTNAME: 192.168.56.20
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
     volumes:
@@ -73,7 +78,9 @@ services:
       iam-init:
         condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD-SHELL", "curl -sf http://localhost:9000/health || exit 1" ]
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"
       interval: 30s
       timeout: 10s
       retries: 5

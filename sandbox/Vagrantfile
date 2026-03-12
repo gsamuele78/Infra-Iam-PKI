@@ -11,30 +11,118 @@
 #   192.168.56.20  =>  iam-host   (infra-iam  / Keycloak)
 #   192.168.56.30  =>  ood-host   (infra-ood  / Open OnDemand)
 #
+# Logging:
+#   All provisioning output is captured to sandbox/logs/<hostname>/<phase>.log
+#   Timestamps are prepended to every line via ts(1) (moreutils) or awk fallback.
+#   A summary table is printed to sandbox/logs/summary.log after each phase.
+#
 # Usage:
 #   vagrant up pki-host           # Start PKI first (others depend on it)
 #   vagrant up iam-host           # Start IAM (waits for PKI fingerprint)
 #   vagrant up ood-host           # Start OOD (builds from deb packages ~15min first time)
-#   vagrant up                    # Start all 3 (PKI must be up before IAM/OOD can initialize)
+#   vagrant up                    # Start all 3
 #   vagrant rsync                 # Push local changes to all VMs
 #   vagrant ssh pki-host          # SSH into a host
 #   vagrant destroy -f            # Wipe everything
+#   sandbox/pull-logs.sh                 # Pull logs from all running VMs immediately
+#   watch -n10 sandbox/pull-logs.sh        # Auto-pull every 10s during long builds
+
+LOG_DIR = File.join(File.dirname(__FILE__), "logs")
+
+# ---------------------------------------------------------------------------
+# Helper: create host-side log directory and return the guest path for tee
+# ---------------------------------------------------------------------------
+def log_path(hostname, phase)
+  host_dir = File.join(LOG_DIR, hostname)
+  FileUtils.mkdir_p(host_dir) unless Dir.exist?(host_dir)
+  "/workspace/Infra-Iam-PKI/sandbox/logs/#{hostname}/#{phase}.log"
+end
+
+# ---------------------------------------------------------------------------
+# Helper: wrap an inline shell script with timestamped tee logging.
+# Every stdout/stderr line is prefixed with ISO8601 timestamp and written
+# both to the console (via tee) and to the per-phase log file.
+# ---------------------------------------------------------------------------
+def logged_shell(hostname, phase, script)
+  log = log_path(hostname, phase)
+  <<~SHELL
+    # --- Logging bootstrap ---
+    mkdir -p "$(dirname '#{log}')"
+    # Truncate log for this run
+    > '#{log}'
+    # Install ts if available, otherwise awk fallback for timestamps
+    _TS_CMD="awk '{ print strftime(\\"%Y-%m-%dT%H:%M:%S\\"), $0; fflush() }'"
+    if command -v ts >/dev/null 2>&1; then _TS_CMD="ts '%Y-%m-%dT%H:%M:%S'"; fi
+    # Redirect all subsequent output through timestamp filter -> tee -> log
+    exec > >(eval "$_TS_CMD" | tee -a '#{log}') 2>&1
+    echo "=========================================="
+    echo " HOST    : #{hostname}"
+    echo " PHASE   : #{phase}"
+    echo " STARTED : $(date '+%Y-%m-%d %H:%M:%S %Z')"
+    echo "=========================================="
+
+    #{script}
+
+    _EXIT=$?
+    echo "=========================================="
+    echo " PHASE   : #{phase}"
+    echo " STATUS  : $( [ $_EXIT -eq 0 ] && echo 'SUCCESS' || echo 'FAILED (exit '$_EXIT')' )"
+    echo " ENDED   : $(date '+%Y-%m-%d %H:%M:%S %Z')"
+    echo "=========================================="
+
+    # Append one-liner to summary log
+    SUMMARY_LOG="/workspace/Infra-Iam-PKI/sandbox/logs/summary.log"
+    printf "%-12s %-20s %-8s %s\\n" "#{hostname}" "#{phase}" \
+      "$( [ $_EXIT -eq 0 ] && echo 'OK' || echo 'FAILED' )" \
+      "$(date '+%Y-%m-%dT%H:%M:%S')" | tee -a "$SUMMARY_LOG"
+
+    exit $_EXIT
+  SHELL
+end
+
+# ---------------------------------------------------------------------------
+# Ensure host-side log root exists before any VM starts
+# ---------------------------------------------------------------------------
+FileUtils.mkdir_p(LOG_DIR) unless Dir.exist?(LOG_DIR)
+# Write a header to summary log on each full `vagrant up`
+summary_log = File.join(LOG_DIR, "summary.log")
+File.open(summary_log, "a") do |f|
+  f.puts ""
+  f.puts "# vagrant up  #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
+  f.puts "#{'%-12s %-20s %-8s %s' % %w[HOST PHASE STATUS TIMESTAMP]}"
+  f.puts "#{'─' * 60}"
+end
+
+# ===========================================================================
 
 Vagrant.configure("2") do |config|
   config.vm.box = "generic/ubuntu2204"
 
-  # Shared folder: rsync the full project into each VM
+  # Shared folder: rsync the full project into each VM (host -> guest ONLY, one-way).
+  # Logs are pulled back to the host via per-VM triggers after each provision phase.
+  # For live log tailing during a long build, run in a second terminal:
+  #   watch -n5 sandbox/pull-logs.sh
   config.vm.synced_folder ".", "/vagrant", disabled: true
   config.vm.synced_folder "../", "/workspace/Infra-Iam-PKI", type: "rsync",
-    rsync__exclude: [".git/", "sandbox/.vagrant/", "infra-pki/step_data/", "infra-pki/db_data/", "infra-pki/logs/", "infra-iam/logs/"]
+    rsync__exclude: [
+      ".git/",
+      "sandbox/.vagrant/",
+      "sandbox/logs/",           # pull-only via triggers: never rsynced host→guest
+      "infra-pki/step_data/",
+      "infra-pki/db_data/",
+      "infra-pki/logs/",
+      "infra-iam/logs/",
+      "infra-iam/certs/",        # bind-mount runtime data: never overwrite
+      "infra-iam/data/"          # bind-mount runtime data: never overwrite
+    ]
 
   # ============================================================
   # Shared: Install Docker + Docker Compose Plugin on every VM
   # ============================================================
-  config.vm.provision "shell", name: "install-docker", inline: <<-SHELL
+  config.vm.provision "shell", name: "install-docker", inline: logged_shell("all-hosts", "install-docker", <<~'INNER')
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y ca-certificates curl gnupg
+    apt-get install -y ca-certificates curl gnupg moreutils
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
@@ -45,12 +133,11 @@ Vagrant.configure("2") do |config|
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     usermod -aG docker vagrant
     echo "Docker installed: $(docker --version)"
-  SHELL
+    echo "Docker Compose installed: $(docker compose version)"
+  INNER
 
   # ============================================================
   # PKI Host: Step-CA on 192.168.56.10
-  # Isolated Docker network: pki-net
-  # Exposes: :80 (public certs/fingerprint), :9000 (CA API, LAN only)
   # ============================================================
   config.vm.define "pki-host" do |pki|
     pki.vm.hostname = "pki-host"
@@ -62,15 +149,35 @@ Vagrant.configure("2") do |config|
       libvirt.cpus   = 2
     end
 
-    pki.vm.provision "shell", name: "start-pki", inline: <<-SHELL
+    pki.vm.provision "shell", name: "start-pki", inline: logged_shell("pki-host", "start-pki", <<~'INNER')
+      set -euo pipefail
       cd /workspace/Infra-Iam-PKI/infra-pki
 
-      # Use sandbox-specific env (test credentials, sandbox IPs)
+      echo "[1/3] Copying sandbox .env..."
       cp .env.sandbox .env
+      echo "  CA_URL        = $(grep ^CA_URL .env | cut -d= -f2)"
+      echo "  DOMAIN_PKI    = $(grep ^DOMAIN_PKI .env | cut -d= -f2- 2>/dev/null || echo 'n/a')"
 
-      # Run production compose — no duplication, this IS the production config
-      docker compose build
+      echo "[2/3] Building Docker images..."
+      docker compose build 2>&1
+
+      echo "[3/3] Starting services..."
       docker compose up -d
+
+      echo "Waiting for Step-CA to become healthy (max 120s)..."
+      for i in $(seq 1 24); do
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' step-ca 2>/dev/null || echo "starting")
+        echo "  Attempt $i/24 — step-ca health: $STATUS"
+        if [ "$STATUS" = "healthy" ]; then break; fi
+        sleep 5
+      done
+
+      echo "Docker service status:"
+      docker compose ps
+
+      echo "Fingerprint probe:"
+      FP=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null || echo "NOT AVAILABLE YET")
+      echo "  Fingerprint = $FP"
 
       echo ""
       echo "====================================================="
@@ -79,16 +186,24 @@ Vagrant.configure("2") do |config|
       echo " Step-CA API        : https://192.168.56.10:9000"
       echo "====================================================="
 
-      # Run the sandbox health probe
+      echo "Running PKI health probe..."
       cd /workspace/Infra-Iam-PKI/sandbox
       docker compose -f pki-sandbox.yml up pki-test-probe --abort-on-container-exit || true
-    SHELL
+    INNER
+
+    # Fallback: if NFS is not available, pull logs back from the VM via rsync over SSH.
+    # With NFS active this trigger is a no-op (files already live on host).
+    pki.trigger.after :provision do |t|
+      t.name = "pull-logs-pki"
+      t.info = "Pulling provisioning logs from pki-host → sandbox/logs/pki-host/"
+      t.run = {
+        inline: "./pull-logs.sh pki-host"
+      }
+    end
   end
 
   # ============================================================
   # IAM Host: Keycloak + Caddy on 192.168.56.20
-  # Isolated Docker network: iam-net
-  # Depends on pki-host being up and serving the fingerprint via HTTP
   # ============================================================
   config.vm.define "iam-host" do |iam|
     iam.vm.hostname = "iam-host"
@@ -100,19 +215,23 @@ Vagrant.configure("2") do |config|
       libvirt.cpus   = 2
     end
 
-    iam.vm.provision "shell", name: "start-iam", inline: <<-SHELL
-      cd /workspace/Infra-Iam-PKI/sandbox
+    iam.vm.provision "shell", name: "start-iam", inline: logged_shell("iam-host", "start-iam", <<~'INNER')
+      set -euo pipefail
+      IAM_DIR=/workspace/Infra-Iam-PKI/infra-iam
 
-      # Use sandbox .env as the base
-      cp /workspace/Infra-Iam-PKI/infra-iam/.env.sandbox .env.iam.tmp
+      # ------------------------------------------------------------------
+      # [1/5] Copia .env.sandbox e inietta il fingerprint PKI
+      # Stessa logica del provisioner originale, invariata.
+      # ------------------------------------------------------------------
+      echo "[1/5] Copying sandbox .env..."
+      cp "$IAM_DIR/.env.sandbox" /tmp/.env.iam.tmp
 
-      # Fetch PKI fingerprint from pki-host over the private network
-      echo "Waiting for PKI fingerprint from pki-host (192.168.56.10)..."
+      echo "[2/5] Fetching PKI fingerprint from pki-host (192.168.56.10)..."
       FINGERPRINT=""
       for i in $(seq 1 60); do
-        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\\n' || true)
+        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\n' || true)
         if [ -n "$FINGERPRINT" ]; then
-          echo "Got fingerprint: $FINGERPRINT"
+          echo "  Got fingerprint at attempt $i: $FINGERPRINT"
           break
         fi
         echo "  Retry $i/60 — PKI not ready yet, waiting 5s..."
@@ -120,57 +239,117 @@ Vagrant.configure("2") do |config|
       done
 
       if [ -z "$FINGERPRINT" ]; then
-        echo "ERROR: Could not get PKI fingerprint from pki-host. Is pki-host running and healthy?"
+        echo "ERROR: Could not get PKI fingerprint from pki-host after 5 minutes."
+        echo "       Is pki-host running? Check: sandbox/logs/pki-host/start-pki.log"
         exit 1
       fi
 
-      # Inject fingerprint into the sandbox .env
-      sed -i "s|^FINGERPRINT=.*|FINGERPRINT=$FINGERPRINT|" .env.iam.tmp
-      mv .env.iam.tmp /workspace/Infra-Iam-PKI/infra-iam/.env
+      sed -i "s|^FINGERPRINT=.*|FINGERPRINT=$FINGERPRINT|" /tmp/.env.iam.tmp
+      mv /tmp/.env.iam.tmp "$IAM_DIR/.env"
+      echo "  .env written with FINGERPRINT=$FINGERPRINT"
 
-      # Start production-equivalent IAM fixture (sandbox compose references production images/builds)
+      # ------------------------------------------------------------------
+      # [3/5] Filesystem setup — mirrors deploy_iam.sh step 2/3
+      # Crea le directory bind-mount con i permessi corretti PRIMA
+      # che qualsiasi container parta, identico a quanto fa il deploy
+      # in produzione. Questo garantisce che il sandbox sia 1:1 con prod.
+      #
+      #   certs/          → PUID:PGID 750  (step-cli scrive, kc/caddy leggono)
+      #   data/db/        → root:root 755  (postgres entrypoint richiede root)
+      #   data/caddy/     → PUID:PGID 750  (caddy user)
+      #   logs/watchtower/→ PUID:PGID 750
+      # ------------------------------------------------------------------
+      echo "[3/5] Setting up bind-mount directories and permissions..."
+      PUID=$(grep "^PUID=" "$IAM_DIR/.env" | cut -d= -f2- | tr -d '"'\''"')
+      PGID=$(grep "^PGID=" "$IAM_DIR/.env" | cut -d= -f2- | tr -d '"'\''"')
+
+      mkdir -p "$IAM_DIR/certs"
+      chown -R "$PUID:$PGID" "$IAM_DIR/certs" && chmod 750 "$IAM_DIR/certs"
+      echo "  certs/           → $PUID:$PGID 750"
+
+      mkdir -p "$IAM_DIR/data/db"
+      chown root:root "$IAM_DIR/data/db" && chmod 755 "$IAM_DIR/data/db"
+      echo "  data/db/         → root:root 755"
+
+      mkdir -p "$IAM_DIR/data/caddy"
+      chown -R "$PUID:$PGID" "$IAM_DIR/data/caddy" && chmod 750 "$IAM_DIR/data/caddy"
+      echo "  data/caddy/      → $PUID:$PGID 750"
+
+      mkdir -p "$IAM_DIR/logs/watchtower"
+      chown -R "$PUID:$PGID" "$IAM_DIR/logs/watchtower" && chmod 750 "$IAM_DIR/logs/watchtower"
+      echo "  logs/watchtower/ → $PUID:$PGID 750"
+
+      chmod 600 "$IAM_DIR/.env"
+      echo "  .env             → 600"
+
+      # ------------------------------------------------------------------
+      # [4/5] Avvio stack sandbox
+      # Usa iam-sandbox.yml (sandbox-specific: no caddy ACME, KC in dev mode)
+      # con il .env produzione-equivalente appena preparato.
+      # ------------------------------------------------------------------
+      echo "[4/5] Starting IAM sandbox stack..."
       docker compose -f /workspace/Infra-Iam-PKI/sandbox/iam-sandbox.yml \
-        --env-file /workspace/Infra-Iam-PKI/infra-iam/.env \
+        --env-file "$IAM_DIR/.env" \
         up -d
+
+      # ------------------------------------------------------------------
+      # [5/5] Health check Keycloak (max 180s)
+      # ------------------------------------------------------------------
+      echo "[5/5] Waiting for Keycloak to become healthy (max 180s)..."
+      for i in $(seq 1 36); do
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' iam-keycloak 2>/dev/null || echo "starting")
+        echo "  Attempt $i/36 — iam-keycloak health: $STATUS"
+        if [ "$STATUS" = "healthy" ]; then break; fi
+        sleep 5
+      done
+
+      echo "Docker service status:"
+      docker compose -f /workspace/Infra-Iam-PKI/sandbox/iam-sandbox.yml ps
 
       echo ""
       echo "====================================================="
       echo " IAM Host Ready (192.168.56.20)"
       echo " Keycloak UI  : http://192.168.56.20/"
       echo " Admin Panel  : http://192.168.56.20/admin"
+      echo " Logs         : sandbox/logs/iam-host/start-iam.log"
       echo "====================================================="
-    SHELL
+    INNER
+
+    iam.trigger.after :provision do |t|
+      t.name = "pull-logs-iam"
+      t.info = "Pulling provisioning logs from iam-host → sandbox/logs/iam-host/"
+      t.run = {
+        inline: "./pull-logs.sh iam-host"
+      }
+    end
   end
 
   # ============================================================
   # OOD Host: Open OnDemand on 192.168.56.30
-  # Isolated Docker network: ood-net
-  # Builds from Ubuntu Noble 24.04 deb packages (first build ~15 min)
   # ============================================================
   config.vm.define "ood-host" do |ood|
     ood.vm.hostname = "ood-host"
     ood.vm.network "private_network", ip: "192.168.56.30"
 
-    # OOD needs more RAM for the Ruby/Rails application + deb build
     ood.vm.provider :libvirt do |libvirt|
       libvirt.driver = "kvm"
       libvirt.memory = 4096
       libvirt.cpus   = 4
     end
 
-    ood.vm.provision "shell", name: "start-ood", inline: <<-SHELL
+    ood.vm.provision "shell", name: "start-ood", inline: logged_shell("ood-host", "start-ood", <<~'INNER')
+      set -euo pipefail
       cd /workspace/Infra-Iam-PKI/sandbox
 
-      # Use sandbox .env as the base
+      echo "[1/4] Copying sandbox .env..."
       cp /workspace/Infra-Iam-PKI/infra-ood/.env.sandbox .env.ood.tmp
 
-      # Fetch PKI fingerprint from pki-host (same as IAM host does)
-      echo "Waiting for PKI fingerprint from pki-host (192.168.56.10)..."
+      echo "[2/4] Fetching PKI fingerprint from pki-host (192.168.56.10)..."
       FINGERPRINT=""
       for i in $(seq 1 60); do
-        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\\n' || true)
+        FINGERPRINT=$(curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint 2>/dev/null | tr -d '\n' || true)
         if [ -n "$FINGERPRINT" ]; then
-          echo "Got fingerprint: $FINGERPRINT"
+          echo "  Got fingerprint at attempt $i: $FINGERPRINT"
           break
         fi
         echo "  Retry $i/60 — PKI not ready yet, waiting 5s..."
@@ -179,23 +358,47 @@ Vagrant.configure("2") do |config|
 
       if [ -z "$FINGERPRINT" ]; then
         echo "ERROR: Could not get PKI fingerprint from pki-host."
+        echo "       Check: sandbox/logs/pki-host/start-pki.log"
         exit 1
       fi
 
+      echo "[3/4] Injecting fingerprint into .env..."
       sed -i "s|^FINGERPRINT=.*|FINGERPRINT=$FINGERPRINT|" .env.ood.tmp
       mv .env.ood.tmp /workspace/Infra-Iam-PKI/infra-ood/.env
 
-      echo "Building Open OnDemand from Ubuntu Noble deb packages (first run takes ~15 min)..."
+      echo "[4/4] Building and starting OOD (first run may take ~15 min for deb build)..."
+      BUILD_START=$(date +%s)
       docker compose -f /workspace/Infra-Iam-PKI/sandbox/ood-sandbox.yml \
         --env-file /workspace/Infra-Iam-PKI/infra-ood/.env \
         up -d --build
+      BUILD_END=$(date +%s)
+      echo "  Build+start completed in $(( BUILD_END - BUILD_START ))s"
+
+      echo "Waiting for OOD portal to become healthy (max 120s)..."
+      for i in $(seq 1 24); do
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' ood-portal 2>/dev/null || echo "starting")
+        echo "  Attempt $i/24 — ood-portal health: $STATUS"
+        if [ "$STATUS" = "healthy" ]; then break; fi
+        sleep 5
+      done
+
+      echo "Docker service status:"
+      docker compose -f /workspace/Infra-Iam-PKI/sandbox/ood-sandbox.yml ps
 
       echo ""
       echo "====================================================="
       echo " OOD Host Ready (192.168.56.30)"
       echo " Open OnDemand: http://192.168.56.30/"
       echo "====================================================="
-    SHELL
+    INNER
+
+    ood.trigger.after :provision do |t|
+      t.name = "pull-logs-ood"
+      t.info = "Pulling provisioning logs from ood-host → sandbox/logs/ood-host/"
+      t.run = {
+        inline: "./pull-logs.sh ood-host"
+      }
+    end
   end
 
 end

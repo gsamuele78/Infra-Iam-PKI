@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Docker Maintenance Script
 # Usage: ./maintenance_docker.sh [prune|monitor|nuke]

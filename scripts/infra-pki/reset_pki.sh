@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # reset_pki.sh
 # Purpose: Completely reset the Infra-PKI environment (Stop containers & Wipe Data)

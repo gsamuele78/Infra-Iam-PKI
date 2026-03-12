@@ -1,12 +1,113 @@
+# x-logging: anchor YAML centralizzato per tutti i servizi
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ---------------------------------------------------------------------------
+# Struttura directory bind-mount sul host (NON named volumes → ispezionabili):
+#
+#   infra-iam/
+#   ├── certs/                  root_ca.crt (da iam-init), keycloak.crt/key (da iam-renewer)
+#   ├── data/
+#   │   ├── db/                 PostgreSQL data files
+#   │   └── caddy/              Caddy ACME/TLS state
+#   ├── logs/
+#   │   └── watchtower/         log watchtower
+#   └── themes/unibo-bigea/     temi Keycloak (nel repo)
+#
+# Separazione delle responsabilità:
+#   deploy_iam.sh   → crea directory + chown/chmod sul HOST prima di docker compose up
+#   iam-init        → fetch Root CA da Step-CA (richiede step-cli dentro il container)
+#   iam-renewer     → loop rinnovo certificati keycloak.crt/key
+#
+# Per avviare: sudo scripts/infra-iam/deploy_iam.sh
+# Per reset:   sudo scripts/infra-iam/reset_iam.sh
+# ---------------------------------------------------------------------------
+
 services:
-  # 1. Initialization Service
-  # Standardized with infra-pki pattern: root entrypoint to fix permissions
+
+  # ------------------------------------------------------------------
+  # docker-socket-proxy
+  # Espone Docker API in sola lettura su iam-net per iam-renewer e watchtower.
+  # Evita il mount diretto di /var/run/docker.sock nei container applicativi.
+  # ------------------------------------------------------------------
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: iam-socket-proxy
+    restart: unless-stopped
+    networks: [ iam-net ]
+    environment:
+      CONTAINERS: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # iam-init  (one-shot, service_completed_successfully)
+  #
+  # Responsabilità:
+  #   1. Crea tutte le directory bind-mount con i permessi corretti
+  #      PRIMA che qualsiasi altro servizio parta
+  #   2. Scarica e verifica il certificato Root CA da Step-CA (PKI)
+  #      e lo scrive in ./certs/root_ca.crt
+  #
+  # Ownership strategy:
+  #   ./certs/          → PUID:PGID  (step-cli scrive, keycloak/caddy leggono)
+  #   ./data/db/        → root:root   (postgres:alpine entrypoint fa chown interno)
+  #   ./data/caddy/     → PUID:PGID  (caddy gira come PUID:PGID)
+  #   ./logs/watchtower/→ PUID:PGID  (watchtower gira come default user)
+  # ------------------------------------------------------------------
+  # iam-init  (one-shot, service_completed_successfully)
+  # Responsabilità UNICA: fetch del Root CA da Step-CA via step-cli.
+  # Directory e permessi sono gestiti da deploy_iam.sh PRIMA di docker compose up,
+  # quindi qui le directory esistono già con i permessi corretti.
   iam-init:
     build:
       context: .
       dockerfile: Dockerfile.init
     container_name: iam-init
-    user: root
+    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: "no"
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    environment:
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+    volumes:
+      - ./certs:/certs
+      - ../scripts:/scripts:ro
+    entrypoint: /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt
+    logging: *default-logging
+
+  # ------------------------------------------------------------------
+  # iam-renewer  (long-running loop, restart: unless-stopped)
+  # Rinnova il certificato TLS di Keycloak via step ca certificate.
+  # Usa Dockerfile.renewer (ha docker-cli per poter fare docker restart).
+  # ------------------------------------------------------------------
+  iam-renewer:
+    build:
+      context: .
+      dockerfile: Dockerfile.renewer
+    container_name: iam-renewer
+    user: "${PUID:-1000}:${PGID:-1000}"
+    restart: unless-stopped
     networks: [ iam-net ]
     deploy:
       resources:
@@ -18,84 +119,44 @@ services:
           cpus: '0.1'
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    entrypoint: /bin/sh
+    entrypoint: /bin/bash
     command: >
-      -c "mkdir -p /certs /data/postgres /data/caddy /data/watchtower_logs && chown -R ${PUID}:${PGID} /certs /data/postgres /data/caddy /data/watchtower_logs && /scripts/infra-iam/fetch_pki_root.sh /certs/root_ca.crt && /scripts/infra-iam/fetch_ad_cert.sh ${AD_HOST} ${AD_PORT} /certs/ad_root_ca.crt && chown -R ${PUID}:${PGID} /certs/*.crt"
-    volumes:
-      - ./keycloak_data:/data/postgres
-      - ./caddy_data:/data/caddy
-      - ./logs/watchtower:/data/watchtower_logs
-      - ./certs:/certs
-      - ../scripts:/scripts
-      - .env:/app/.env
-    env_file:
-      - .env
-    logging: &default-logging
-      driver: "json-file"
-      options:
-        max-file: "5"
-        max-size: "15m"
-
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:edge
-    container_name: iam-docker-proxy
+      -c "
+        while true; do
+          echo 'Checking certificates...';
+          if /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key; then
+            echo 'Certificate renewed, restarting Keycloak...';
+            docker restart iam-keycloak;
+          else
+            echo 'No renewal needed or renewal failed.';
+          fi;
+          sleep 86400;
+        done
+      "
     environment:
-      - CONTAINERS=1
-      - POST=1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks: [ iam-net ]
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.2'
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-    logging: *default-logging
-
-  renewer:
-    build:
-      context: .
-      dockerfile: Dockerfile.renewer
-    container_name: iam-renewer
-    user: root
-    restart: unless-stopped
-    depends_on:
-      iam-init:
-        condition: service_completed_successfully
-      docker-socket-proxy:
-        condition: service_started
-    networks: [ iam-net ]
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.2'
-    entrypoint: /bin/sh
-    command: >
-      -c "while true; do
-        echo 'Checking certificates...' &&
-        /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key &&
-        docker restart iam-keycloak || true;
-        sleep 86400;
-      done"
-    environment:
-      - STEP_TOKEN=${STEP_TOKEN}
+      - STEP_TOKEN_FILE=/run/secrets/step_token
       - CA_URL=${CA_URL}
       - FINGERPRINT=${FINGERPRINT}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
     volumes:
       - ./certs:/certs
-      - ../scripts:/scripts
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+      - ../scripts:/scripts:ro
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+      docker-socket-proxy:
+        condition: service_started
     logging: *default-logging
 
+  # ------------------------------------------------------------------
+  # db  —  PostgreSQL 15 per Keycloak
+  # NOTA: NON sovrascrivere user: qui — il docker-entrypoint.sh di
+  # postgres:alpine richiede root per inizializzare data dir e poi
+  # droppare a uid postgres (70) via gosu internamente.
+  # ------------------------------------------------------------------
   db:
     image: postgres:15-alpine
     container_name: iam-db
-    user: "${PUID}:${PGID}"
     restart: unless-stopped
     deploy:
       resources:
@@ -109,7 +170,9 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./keycloak_data:/var/lib/postgresql/data
+      - ./data/db:/var/lib/postgresql/data
+      - ./postgres-conf/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
       interval: 10s
@@ -123,10 +186,17 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     logging: *default-logging
 
+  # ------------------------------------------------------------------
+  # keycloak
+  # ------------------------------------------------------------------
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.7
+    build:
+      context: .
+      dockerfile: Dockerfile.keycloak
+      args:
+        KC_VERSION: "26.0.7"
     container_name: iam-keycloak
-    user: "${PUID}:${PGID}"
+    user: "${PUID:-1000}:${PGID:-1000}"
     restart: unless-stopped
     deploy:
       resources:
@@ -145,11 +215,10 @@ services:
       KC_PROXY: edge
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
-      JAVA_OPTS_APPEND: "-Xms2048m -Xmx4096m"
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1536m -XX:MaxMetaspaceSize=256m"
     volumes:
-      - ./certs/ad_root_ca.crt:/etc/x509/ca/ad_root_ca.crt:ro
-      - ./certs/root_ca.crt:/etc/x509/ca/root_ca.crt:ro
-      - ./themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea
+      - ./certs:/certs:ro
+      - ./themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea:ro
     healthcheck:
       test:
         - "CMD-SHELL"
@@ -165,6 +234,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 120s
     depends_on:
       db:
         condition: service_healthy
@@ -173,10 +243,13 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     logging: *default-logging
 
+  # ------------------------------------------------------------------
+  # caddy  —  reverse proxy + ACME
+  # ------------------------------------------------------------------
   caddy:
     image: caddy:2.9.1-alpine
     container_name: iam-proxy
-    user: "${PUID}:${PGID}"
+    user: "${PUID:-1000}:${PGID:-1000}"
     restart: unless-stopped
     deploy:
       resources:
@@ -187,38 +260,57 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./.Caddyfile:/etc/caddy/Caddyfile
-      - ./caddy_data:/data
-      - ./certs/root_ca.crt:/etc/ssl/certs/root_ca.crt
+      - ./.Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./certs:/etc/ssl/certs/ca-bundle:ro
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:2019/metrics" ]
+      test: [ "CMD-SHELL", "curl -sf http://localhost:80 -o /dev/null || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 120s
     networks: [ iam-net ]
     depends_on:
       iam-init:
         condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     logging: *default-logging
 
+  # ------------------------------------------------------------------
+  # watchtower  —  auto-update immagini con label enable=true
+  # ------------------------------------------------------------------
   watchtower:
     image: containrrr/watchtower:1.7.1
     container_name: iam-watchtower
+    restart: unless-stopped
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+      - DOCKER_API_VERSION=1.44
+      - WATCHTOWER_NO_RESTART=true
     deploy:
       resources:
         limits:
           memory: 128M
           cpus: '0.2'
-    environment:
-      - DOCKER_API_VERSION=1.44
+    networks: [ iam-net ]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./logs/watchtower:/var/log/watchtower
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
     command: --interval 86400 --cleanup --label-enable
     logging: *default-logging
 
 networks:
   iam-net:
     name: iam-net
+
+# Nessun named volume — tutto su bind mount in ./
+# Struttura risultante sul host dopo primo avvio:
+#   infra-iam/certs/          root_ca.crt, keycloak.crt, keycloak.key
+#   infra-iam/data/db/        PostgreSQL data files
+#   infra-iam/data/caddy/     Caddy ACME certificates e state
+#   infra-iam/logs/watchtower/ log di watchtower

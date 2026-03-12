@@ -1,0 +1,24 @@
+# Dockerfile.keycloak
+# Runs 'kc.sh build' so 'start --optimized' works correctly (PERF-001 fix)
+ARG KC_VERSION=25.0.0
+FROM quay.io/keycloak/keycloak:${KC_VERSION} AS builder
+
+ENV KC_DB=postgres
+ENV KC_HEALTH_ENABLED=true
+ENV KC_METRICS_ENABLED=true
+ENV KC_FEATURES=token-exchange,admin-fine-grained-authz
+
+# Copy custom themes before build
+COPY themes/unibo-bigea /opt/keycloak/themes/unibo-bigea
+
+# Build optimized Quarkus binary
+RUN /opt/keycloak/bin/kc.sh build \
+    --db=postgres \
+    --health-enabled=true \
+    --metrics-enabled=true
+
+FROM quay.io/keycloak/keycloak:${KC_VERSION}
+COPY --from=builder /opt/keycloak/lib/quarkus /opt/keycloak/lib/quarkus
+COPY --from=builder /opt/keycloak/themes/unibo-bigea /opt/keycloak/themes/unibo-bigea
+
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
