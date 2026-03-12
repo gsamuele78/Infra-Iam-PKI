@@ -1,0 +1,186 @@
+services:
+  # 1. Initialization Service
+  # Standardized with infra-pki pattern: root entrypoint to fix permissions
+  iam-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.init
+    container_name: iam-init
+    user: root
+    networks: [ iam-net ]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    entrypoint: /bin/sh
+    command: >
+      -c "while true; do
+        echo "Checking certificates..." &&
+        if /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key; then
+          echo "Certificate renewed, restarting Keycloak..." &&
+          docker restart iam-keycloak;
+        else
+          echo "No renewal needed or renewal failed.";
+        fi;
+        sleep 86400;
+      done"
+      done"
+    environment:
+      # SEC-002: STEP_TOKEN mounted as file, not env var
+      # Write token to file in entrypoint: echo "$STEP_TOKEN" > /run/secrets/step_token
+      - STEP_TOKEN_FILE=/run/secrets/step_token
+      - CA_URL=${CA_URL}
+      - FINGERPRINT=${FINGERPRINT}
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    volumes:
+      - ./certs:/certs
+      - ../scripts:/scripts
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  db:
+    image: postgres:15-alpine
+    container_name: iam-db
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./keycloak_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [ iam-net ]
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  keycloak:
+    build:
+      context: .
+      dockerfile: Dockerfile.keycloak
+    # image: quay.io/keycloak/keycloak  # replaced by Dockerfile.keycloak (PERF-001):26.0.7
+    container_name: iam-keycloak
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+          cpus: '2.0'
+        reservations:
+          memory: 1024M
+          cpus: '0.5'
+    command: start --optimized
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db/keycloak?ssl=true&sslmode=verify-ca&sslrootcert=/certs/internal_ca.crt
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_HOSTNAME: ${DOMAIN_SSO}
+      KC_PROXY: edge
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      JAVA_OPTS_APPEND: "-Xms512m -Xmx1536m -XX:MaxMetaspaceSize=256m"
+    volumes:
+      - ./certs/ad_root_ca.crt:/etc/x509/ca/ad_root_ca.crt:ro
+      - ./certs/root_ca.crt:/etc/x509/ca/root_ca.crt:ro
+      - ./themes/unibo-bigea:/opt/keycloak/themes/unibo-bigea
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "exec 3<>/dev/tcp/127.0.0.1/8080; echo -e 'GET /health/ready HTTP/1.1\r
+
+          host: localhost\r
+
+          Connection: close\r
+
+          \r
+
+          ' >&3; grep 'HTTP/1.1 200 OK' <&3"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [ iam-net ]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.9.1-alpine
+    container_name: iam-proxy
+    user: "${PUID}:${PGID}"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./.Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+      - ./certs/root_ca.crt:/etc/ssl/certs/root_ca.crt
+    healthcheck:
+      test: [ "CMD", "CMD-SHELL", "curl -sf http://localhost:80 -o /dev/null || exit 1 ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks: [ iam-net ]
+    depends_on:
+      iam-init:
+        condition: service_completed_successfully
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    logging: *default-logging
+
+  watchtower:
+    image: containrrr/watchtower
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+      - WATCHTOWER_NO_RESTART=true:1.7.1
+    container_name: iam-watchtower
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    environment:
+      - DOCKER_API_VERSION=1.44
+    volumes:
+      # SEC-004: Use socket proxy, not direct socket
+      # (ensure docker-socket-proxy service is running on iam-net)
+      - ./logs/watchtower:/var/log/watchtower
+    command: --interval 86400 --cleanup --label-enable
+    logging: *default-logging
+
+networks:
+  iam-net:
+    name: iam-net

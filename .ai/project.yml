@@ -1,0 +1,243 @@
+# .ai/project.yml
+# ══════════════════════════════════════════════════════════════
+# SINGLE SOURCE OF TRUTH for AI agent context generation.
+#
+# This file contains ONLY what cannot be extracted from code:
+#   - Project identity and paradigm
+#   - Hard constraints (the engineering rules)
+#   - Known bugs and tech debt
+#   - Branding requirements
+#   - Script behavioral categories
+#
+# Everything else (image versions, script inventory, .env variables,
+# directory structure, boot sequences) is EXTRACTED from the actual
+# codebase by generate.sh. If this file disagrees with the code,
+# the code wins — and validate.sh will flag the mismatch.
+#
+# Maintenance: Update this file when constraints CHANGE (not when
+# code changes — the generator handles that automatically).
+# ══════════════════════════════════════════════════════════════
+
+project:
+  name: "Infra-IAM-PKI"
+  version: "2.0.0"
+  owner: "JFS — IT Officer (Funzionario Tecnico Informatico), BiGeA, Università di Bologna"
+  paradigm: "Pessimistic System Engineering"
+  paradigm_definition: "Assume failure. Bound all resources. Verify all trust chains. Fail fast on misconfiguration."
+
+  # Research context
+  department: "BiGeA — Biological, Geological and Environmental Sciences"
+  university: "Alma Mater Studiorum — Università di Bologna"
+  research_group: "BIOME — Biodiversity & MacroEcology"
+  funded_projects:
+    - "PNRR LifeWatch-Plus"
+    - "PON LifeWatch-Plus"
+    - "Life4Pollinators"
+
+# ──────────────────────────────────────────────────────────────
+# HARD CONSTRAINTS
+# These are the non-negotiable engineering rules.
+# Each constraint has an ID, rule text, rationale, and a
+# validation method (used by validate.sh to check compliance).
+# ──────────────────────────────────────────────────────────────
+constraints:
+  - id: "HC-01"
+    rule: "Every container MUST have deploy.resources.limits for both memory and cpus"
+    rationale: "Prevents OOM cascades on shared hosts. Keycloak (Java) is the primary offender."
+    validate: "compose_has_resource_limits"
+
+  - id: "HC-02"
+    rule: "BIND MOUNTS only — zero named Docker volumes"
+    rationale: "Named volumes are opaque, hard to backup, impossible to inspect."
+    validate: "compose_no_named_volumes"
+
+  - id: "HC-03"
+    rule: "All scripts MUST begin with set -euo pipefail"
+    rationale: "Fail-fast on undefined vars, pipe failures, any error."
+    validate: "scripts_have_strict_mode"
+
+  - id: "HC-04"
+    rule: "Passwords MUST be written to files — never passed as CLI arguments"
+    rationale: "Prevents leakage in ps aux, /proc/*/cmdline, Docker inspect, shell history."
+    validate: "no_password_cli_args"
+
+  - id: "HC-05"
+    rule: "PostgreSQL ports are NEVER exposed to the host"
+    rationale: "DB is internal-only. Accessed via Docker network."
+    validate: "compose_no_db_ports"
+
+  - id: "HC-06"
+    rule: "All Dockerfiles bake dependencies at build time — no runtime package installation"
+    rationale: "Eliminates runtime failures if package mirrors are offline. Immutable containers."
+    validate: "no_runtime_pkg_install"
+
+  - id: "HC-07"
+    rule: "Pin ALL upstream image versions — no :latest tag"
+    rationale: "Reproducible builds. Version drift between components causes silent failures."
+    validate: "compose_no_latest_tags"
+
+  - id: "HC-08"
+    rule: ".env files are NEVER committed to git"
+    rationale: "Contains passwords, tokens, fingerprints."
+    validate: "gitignore_has_env"
+
+  - id: "HC-09"
+    rule: "The renewer container NEVER mounts /var/run/docker.sock directly"
+    rationale: "Full host control = container escape vector. Use docker-socket-proxy."
+    validate: "compose_no_docker_sock"
+
+  - id: "HC-10"
+    rule: "Deploy scripts MUST exit 1 if chown/permission setup fails"
+    rationale: "Prevents cryptic Permission Denied errors deep in container logs."
+    validate: "deploy_scripts_check_chown"
+
+  - id: "HC-11"
+    rule: "No external CDN calls for fonts or CSS in UI themes"
+    rationale: "Airgap/Zero-Trust requirement."
+    validate: "no_external_cdn"
+
+  - id: "HC-12"
+    rule: "Use jq for JSON manipulation — never sed/awk on JSON"
+    rationale: "sed breaks on special chars, no schema validation."
+    validate: "no_sed_on_json"
+
+# ──────────────────────────────────────────────────────────────
+# COMPOSE FORMAT RULES
+# ──────────────────────────────────────────────────────────────
+compose_rules:
+  syntax: "Docker Compose v2 — NO version: key"
+  command: "docker compose (space) — NOT docker-compose (hyphen)"
+  required_sections:
+    - "deploy.resources.limits"
+    - "healthcheck (for stateful services)"
+    - "logging (json-file with anchored config)"
+    - "labels (watchtower enable)"
+    - "depends_on (with condition)"
+
+# ──────────────────────────────────────────────────────────────
+# SCRIPT BEHAVIORAL CATEGORIES
+# Container-internal scripts MUST NEVER use interactive input.
+# This list is manually maintained because the distinction is
+# semantic (how the script is called), not syntactic.
+# ──────────────────────────────────────────────────────────────
+script_categories:
+  container_internal:
+    description: "Run inside Docker containers without TTY. NEVER use read -p."
+    scripts:
+      - "scripts/infra-pki/init_step_ca.sh"
+      - "scripts/infra-pki/patch_ca_config.sh"
+      - "scripts/infra-iam/fetch_pki_root.sh"
+      - "scripts/infra-iam/fetch_ad_cert.sh"
+      - "scripts/infra-iam/renew_certificate.sh"
+
+  operator_interactive:
+    description: "Run by sysadmin on host. May use interactive input."
+    scripts:
+      - "scripts/infra-pki/deploy_pki.sh"
+      - "scripts/infra-pki/reset_pki.sh"
+      - "scripts/infra-pki/configure_pki.sh"
+      - "scripts/infra-pki/generate_token.sh"
+      - "scripts/infra-pki/manage_host_trust.sh"
+      - "scripts/infra-iam/deploy_iam.sh"
+      - "scripts/infra-iam/reset_iam.sh"
+      - "scripts/infra-iam/configure_iam.sh"
+      - "scripts/infra-ood/deploy_ood.sh"
+      - "scripts/infra-ood/reset_ood.sh"
+      - "scripts/common/maintenance_docker.sh"
+
+  client_portable:
+    description: "Copied to remote hosts. Self-contained."
+    scripts:
+      - "scripts/infra-pki/client/join_pki.sh"
+      - "scripts/infra-pki/client/setup_client_trust.sh"
+
+# ──────────────────────────────────────────────────────────────
+# KNOWN BUGS / TECH DEBT
+# Do NOT fix without explicit instruction.
+# ──────────────────────────────────────────────────────────────
+known_issues:
+  - id: "TD-01"
+    severity: "P2"
+    component: "infra-pki"
+    issue: "fingerprint-writer writes to fingerprint/root_ca.fingerprint (dir) but deploy_pki.sh checks step_data/fingerprint (file). Path inconsistency."
+
+  - id: "TD-02"
+    severity: "P0"
+    component: "infra-iam"
+    issue: "Keycloak JAVA_OPTS_APPEND Xms2048m/Xmx4096m exceeds container memory limit of 2048M. Must be Xms512m/Xmx1536m max."
+
+  - id: "TD-03"
+    severity: "P1"
+    component: "infra-iam"
+    issue: "renew_certificate.sh restarts Keycloak on EVERY 24h loop iteration, not only when renewal actually happened."
+
+  - id: "TD-04"
+    severity: "P1"
+    component: "infra-iam"
+    issue: ".env file mounted as volume (.env:/app/.env) leaks all secrets into init container."
+
+  - id: "TD-05"
+    severity: "P3"
+    component: "infra-pki"
+    issue: "patch_ca_config.sh runs on EVERY container start, even when ca.json is already correct. Idempotent but noisy."
+
+  - id: "TD-06"
+    severity: "P2"
+    component: "infra-ood"
+    issue: "Dockerfile.ood pulls ondemand-release-web_4.1.0 — no version pinning for the main ondemand package."
+
+  - id: "TD-07"
+    severity: "P2"
+    component: "kubernetes"
+    issue: "Keycloak image pinned to 23.0 in K8s manifests but 26.0.7 in Docker compose."
+
+  - id: "TD-08"
+    severity: "P2"
+    component: "kubernetes"
+    issue: "step-ca image pinned to 0.25.2 in K8s but 0.29.0 in Docker compose."
+
+  - id: "TD-09"
+    severity: "P3"
+    component: "sandbox"
+    issue: "full_sandbox_launcher.sh has dangling EOF and references non-existent docker-compose.sandbox.yml."
+
+# ──────────────────────────────────────────────────────────────
+# BRANDING
+# ──────────────────────────────────────────────────────────────
+branding:
+  primary_color: "#C80E0F"
+  primary_name: "Unibo Red"
+  secondary_color: "#2C3E50"
+  secondary_name: "BiGeA Gray"
+  dark_variant: "#9A0B0B"
+  font_stack: "system-ui, -apple-system, sans-serif"
+  font_alternative: "Inter (bundled locally, never CDN)"
+  style: "Glassmorphism (backdrop-filter, rgba backgrounds)"
+  reference_site: "https://bigea.unibo.it/it"
+  cdn_policy: "FORBIDDEN — all assets must be local/bundled"
+
+# ──────────────────────────────────────────────────────────────
+# SANDBOX TOPOLOGY
+# ──────────────────────────────────────────────────────────────
+sandbox:
+  provider: "Vagrant + libvirt/KVM"
+  network: "192.168.56.0/24"
+  hosts:
+    - name: "pki-host"
+      ip: "192.168.56.10"
+      ram: 2048
+      cpus: 2
+      compose: "infra-pki/docker-compose.yml"
+      note: "Uses PRODUCTION compose directly — no sandbox override"
+    - name: "iam-host"
+      ip: "192.168.56.20"
+      ram: 2048
+      cpus: 2
+      compose: "sandbox/iam-sandbox.yml"
+      note: "Sandbox override: KC start-dev, no renewer, simple Caddy"
+    - name: "ood-host"
+      ip: "192.168.56.30"
+      ram: 4096
+      cpus: 4
+      compose: "sandbox/ood-sandbox.yml"
+      note: "Builds real Dockerfile.ood — first build ~15min"

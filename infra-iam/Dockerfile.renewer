@@ -3,6 +3,8 @@ FROM smallstep/step-cli:0.29.0
 USER root
 
 # Install required packages at build time to ensure immutability
+# hadolint ignore=DL3018
 RUN apk add --no-cache docker-cli bash
 
 # The entrypoint will use bash to run the renewal loop
+USER step

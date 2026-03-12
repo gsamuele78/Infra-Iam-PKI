@@ -23,11 +23,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ood
-    image: infra-ood:latest
+    image: infra-ood:local
     container_name: ood-portal
     # Open OnDemand requires root to execute 'sudo' for user-specific app spawning
     user: root
-    privileged: true
+    # privileged: true  # REMOVED: contradicts cap_drop, use specific caps
     restart: unless-stopped
     depends_on:
       ood-init:

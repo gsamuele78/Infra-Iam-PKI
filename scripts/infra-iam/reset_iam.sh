@@ -1,14 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # reset_iam.sh
-# Purpose: Completely reset the Infra-IAM environment (Stop containers & Wipe Data)
+# Reset completo dell'ambiente Infra-IAM: ferma i container e cancella tutti i dati.
 # Location: scripts/infra-iam/reset_iam.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../../infra-iam" && pwd)"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -17,51 +16,64 @@ NC='\033[0m'
 echo -e "${RED}=== DANGER: RESET INFRA-IAM ===${NC}"
 echo "Target Directory: $PROJECT_DIR"
 echo ""
-echo "This action will:"
-echo "  1. Stop and remove all Infra-IAM containers and volumes."
-echo "  2. PERMANENTLY DELETE all Keycloak data, database records, and certificates."
-echo "     (Wiping 'keycloak_data', 'caddy_data', 'certs', and 'logs')"
+echo "Questa operazione:"
+echo "  1. Ferma e rimuove tutti i container Infra-IAM."
+echo "  2. CANCELLA DEFINITIVAMENTE:"
+echo "     certs/           (certificati PKI)"
+echo "     data/db/         (database PostgreSQL)"
+echo "     data/caddy/      (stato ACME/TLS Caddy)"
+echo "     logs/            (tutti i log)"
 echo ""
-echo -e "${YELLOW}This cannot be undone.${NC}"
+echo -e "${YELLOW}Operazione irreversibile.${NC}"
 echo ""
 
-read -rp "Are you sure you want to proceed? (type 'yes' to confirm): " confirm
+read -rp "Sei sicuro? (scrivi 'yes' per confermare): " confirm
 
 if [ "$confirm" != "yes" ]; then
-    echo "Aborted."
+    echo "Annullato."
     exit 1
 fi
 
 if [ ! -d "$PROJECT_DIR" ]; then
-    echo "Error: Project directory not found at $PROJECT_DIR"
+    echo "Error: directory non trovata: $PROJECT_DIR"
     exit 1
 fi
 
 echo ""
-echo -e "${GREEN}1. Stopping containers and removing volumes...${NC}"
-(cd "$PROJECT_DIR" && docker compose down -v) 2>/dev/null || echo "Docker compose down failed (maybe already stopped)."
+echo -e "${GREEN}1. Fermo i container e rimuovo i volumi...${NC}"
+(cd "$PROJECT_DIR" && docker compose down -v) 2>/dev/null \
+    || echo "docker compose down fallito (forse già fermato)."
 
 echo ""
-echo -e "${GREEN}2. Wiping data directories...${NC}"
+echo -e "${GREEN}2. Cancello le directory dati...${NC}"
 
-wipe_and_recreate() {
-    local dir="$1"
-    echo "   Wiping $dir..."
-    if [ -d "$PROJECT_DIR/${dir:?}" ]; then
-        rm -rf "$PROJECT_DIR/${dir:?}" 2>/dev/null || sudo rm -rf "$PROJECT_DIR/${dir:?}"
+wipe_dir() {
+    local rel="$1"
+    local full="$PROJECT_DIR/$rel"
+    echo "   Cancello $rel..."
+    if [ -d "$full" ]; then
+        rm -rf "$full" 2>/dev/null || sudo rm -rf "$full"
     fi
-    mkdir -p "$PROJECT_DIR/${dir:?}"
 }
 
-wipe_and_recreate "keycloak_data"
-wipe_and_recreate "caddy_data"
-wipe_and_recreate "certs"
-wipe_and_recreate "logs"
-mkdir -p "$PROJECT_DIR/logs/watchtower"
+wipe_dir "certs"
+wipe_dir "data/db"
+wipe_dir "data/caddy"
+wipe_dir "logs"
 
 echo ""
-echo -e "${GREEN}>>> RESET COMPLETE <<<${NC}"
-echo "You can now rebuild the environment:"
+echo -e "${GREEN}3. Ricreo la struttura directory vuota...${NC}"
+# Le directory vengono ricreate vuote; deploy_iam.sh imposterà
+# i permessi corretti al prossimo avvio.
+mkdir -p "$PROJECT_DIR/certs"
+mkdir -p "$PROJECT_DIR/data/db"
+mkdir -p "$PROJECT_DIR/data/caddy"
+mkdir -p "$PROJECT_DIR/logs/watchtower"
+echo "   Struttura ricreata (permessi da impostare al prossimo deploy)."
+
+echo ""
+echo -e "${GREEN}>>> RESET COMPLETATO <<<${NC}"
+echo "Per riavviare l'ambiente:"
 echo "  cd $SCRIPT_DIR"
 echo "  sudo ./deploy_iam.sh"
 echo ""

@@ -159,7 +159,7 @@ services:
   caddy:
     build:
       context: ./caddy
-    image: infra-pki-caddy:latest # Local build, keeping latest for local
+    image: infra-pki-caddy:local # Local build
     container_name: step-ca-proxy
     user: "${PUID}:${PGID}"
     restart: unless-stopped

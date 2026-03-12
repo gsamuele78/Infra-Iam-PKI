@@ -53,7 +53,7 @@ if [ -n "$DOMAIN_CA" ]; then
 fi
 
 # Get CA Fingerprint
-FINGERPRINT_FILE="$WORKDIR/step_data/fingerprint"
+FINGERPRINT_FILE="$WORKDIR/step_data/fingerprint/root_ca.fingerprint/root_ca.fingerprint"
 if [ ! -f "$FINGERPRINT_FILE" ]; then
     echo -e "${RED}Error: Fingerprint file not found at $FINGERPRINT_FILE.${NC}"
     echo "Ensure the stack is running: docker compose up -d"

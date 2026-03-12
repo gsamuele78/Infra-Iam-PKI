@@ -10,6 +10,7 @@ services:
       context: ../infra-ood
       dockerfile: Dockerfile.init
     container_name: ood-init
+    user: root
     restart: on-failure:3
     networks: [ ood-net ]
     environment:

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Wait for Step-CA to be ready
 echo "Waiting for Step-CA to initialize..."

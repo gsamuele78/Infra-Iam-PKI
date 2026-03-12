@@ -28,7 +28,7 @@ else
 fi
 
 # --- 1. Load Configuration ---
-# Try to source .env files from typical locations
+# Try to source "$(dirname "$0")/../common/parse_env.sh" files from typical locations
 if [ -f "$WORKDIR/../infra-pki/.env" ]; then
     source "$WORKDIR/../infra-pki/.env"
 elif [ -f "$WORKDIR/.env" ]; then

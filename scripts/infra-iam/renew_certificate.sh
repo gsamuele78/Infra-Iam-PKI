@@ -19,9 +19,16 @@ echo "Using CA_URL: $CA_URL"
 if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
     echo "Certificate or Key missing. Attempting initial enrollment..."
     
-    # Check for STEP_TOKEN environment variable
+    # Check for STEP_TOKEN environment variable or fallback to STEP_TOKEN_FILE
     if [ -z "${STEP_TOKEN:-}" ]; then
-        echo "ERROR: STEP_TOKEN env var is missing."
+        if [ -n "${STEP_TOKEN_FILE:-}" ] && [ -f "$STEP_TOKEN_FILE" ]; then
+            STEP_TOKEN=$(cat "$STEP_TOKEN_FILE" | tr -d '\n')
+            echo "Loaded STEP_TOKEN from $STEP_TOKEN_FILE."
+        fi
+    fi
+
+    if [ -z "${STEP_TOKEN:-}" ]; then
+        echo "ERROR: STEP_TOKEN env var (or STEP_TOKEN_FILE) is missing."
         echo "Cannot enroll new certificate."
         exit 1
     fi
