@@ -102,6 +102,17 @@ jobs:
           docker compose -f infra-ood/docker-compose.yml config > /dev/null
         continue-on-error: false
 
+      - name: Validate infra-rstudio compose
+        run: |
+          # Create minimal .env for compose config validation if missing
+          if [ -f infra-rstudio/.env.sandbox ]; then
+            cp infra-rstudio/.env.sandbox infra-rstudio/.env
+          else
+            touch infra-rstudio/.env
+          fi
+          docker compose -f infra-rstudio/docker-compose.yml config > /dev/null
+        continue-on-error: false
+
   # ────────────────────────────────────────────────────────────
   # Job 4: Validate shell script syntax
   # ────────────────────────────────────────────────────────────

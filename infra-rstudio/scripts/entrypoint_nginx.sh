@@ -1,0 +1,219 @@
+#!/bin/bash
+# entrypoint_nginx.sh
+# Custom Nginx Entrypoint using project's common_utils.sh for template processing
+
+set -euo pipefail
+
+# Define paths
+SCRIPT_DIR="/scripts"
+LIB_DIR="/scripts/lib"
+TEMPLATE_DIR="/etc/nginx/templates"
+WEB_ROOT="/usr/share/nginx/html"
+NGINX_CONF_DIR="/etc/nginx"
+
+# Source common_utils.sh
+if [ -f "${LIB_DIR}/common_utils.sh" ]; then
+    source "${LIB_DIR}/common_utils.sh"
+    # Create a dummy LOG_FILE variable to prevent common_utils from complaining or failing on mkdir /var/log/r_env_manager if not root/protected
+    # Container usually runs as root, so /var/log might work, but let's be safe.
+    LOG_FILE="/var/log/nginx/entrypoint.log"
+    mkdir -p "$(dirname "$LOG_FILE")"
+else
+    echo "ERROR: common_utils.sh not found!"
+    exit 1
+fi
+
+log "INFO" "Starting Botanical Portal Nginx Entrypoint..."
+
+# 2. System Optimization (Nginx Tuning)
+log "INFO" "Applying Nginx Optimizations..."
+# Default to auto/1024 if not set
+WORKER_PROCESSES="${NGINX_WORKER_PROCESSES:-auto}"
+WORKER_CONNECTIONS="${NGINX_WORKER_CONNECTIONS:-1024}"
+
+# We use sed to patch nginx.conf (since our template might not have these variables)
+if [ -f "/etc/nginx/nginx.conf" ]; then
+    sed -i "s/^worker_processes.*/worker_processes ${WORKER_PROCESSES};/" /etc/nginx/nginx.conf
+    sed -i "s/worker_connections.*/worker_connections ${WORKER_CONNECTIONS};/" /etc/nginx/nginx.conf
+fi
+
+# 2.5 IPv6 Graceful Fallback
+# If the container host explicitly disables IPv6, mounting templates with [::]:80 or [::]:443
+# will cause Nginx to crash immediately upon boot. We strip it if IPv6 is unreachable.
+if [ "${IPV6_ENABLED}" != "true" ] && ! cat /proc/net/if_inet6 >/dev/null 2>&1; then
+    log "WARN" "IPv6 is disabled on the host kernel. Stripping IPv6 bindings from Nginx templates..."
+    find "${TEMPLATE_DIR}" -type f -name "*.conf.template" -exec sed -i '/listen *\[::\]:/d' {} \;
+    if [ -f "${NGINX_CONF_DIR}/nginx.conf" ]; then
+        sed -i '/listen *\[::\]:/d' "${NGINX_CONF_DIR}/nginx.conf"
+    fi
+fi
+
+# 3. SSL Configuration & ACME Enrollment
+if [ "${LE_ENABLED}" == "true" ]; then
+    log "INFO" "Let's Encrypt / ACME Enrollment Enabled."
+    
+    if [ -z "${LE_DOMAIN}" ] || [ -z "${LE_EMAIL}" ]; then
+        log "ERROR" "LE_DOMAIN and LE_EMAIL must be set."
+    else
+        # Check if certificate already exists
+        if [ ! -d "/etc/letsencrypt/live/${LE_DOMAIN}" ]; then
+            log "INFO" "Obtaining certificate for ${LE_DOMAIN}..."
+            
+            CERTBOT_CMD="certbot --nginx -d ${LE_DOMAIN} --email ${LE_EMAIL} --agree-tos --non-interactive"
+            
+            # Internal CA Support
+            if [ -n "${LE_ACME_SERVER:-}" ]; then
+                log "INFO" "Using Custom ACME Server: ${LE_ACME_SERVER}"
+                CERTBOT_CMD="${CERTBOT_CMD} --server ${LE_ACME_SERVER}"
+            fi
+            
+            if $CERTBOT_CMD; then
+                log "INFO" "Certificate obtained successfully."
+                # Setup Auto-renewal loop (simple background process)
+                (while :; do sleep 12h; certbot renew --quiet --post-hook "nginx -s reload"; done) &
+            else
+                log "ERROR" "Certbot failed."
+            fi
+        else
+            log "INFO" "Certificate already exists for ${LE_DOMAIN}. Starting renewal loop."
+            (while :; do sleep 12h; certbot renew --quiet --post-hook "nginx -s reload"; done) &
+        fi
+    fi
+else
+    # Fallback to Enrolled Step-CA Certificates if present
+    # Logic: If we enrolled via sidecar or volume, use them.
+    CERT_DIR="/etc/ssl/step"
+    if [ -f "$CERT_DIR/site.crt" ] && [ -s "$CERT_DIR/site.crt" ]; then
+        log "INFO" "Using Enrolled Step-CA Certificates..."
+        export SSL_CERT_PATH="$CERT_DIR/site.crt"
+        export SSL_KEY_PATH="$CERT_DIR/site.key"
+    fi
+fi
+
+
+# --- Template Processing Logic ---
+# The user specifically asked to use common_utils logic.
+# process_template usage: process_template "template_file" "output_variable" "KEY=VAL" ...
+
+# 1. Process Main Nginx Config
+# We use envsubst for the main config because it might contain many shell vars 
+# and process_template is designed for specific placeholders %%VAR%%.
+# Check if template uses {{VAR}} or $VAR or %%VAR%%.
+# Original project common_utils uses %%. Docker usually uses $VAR.
+# Let's see what templates we have. 
+# If templates/nginx.conf.template uses ${VAR}, we use envsubst.
+# If templates/portal_index.html.template uses %%CURRENT_YEAR%%, we use process_template.
+
+log "INFO" "Processing Nginx Configuration..."
+mkdir -p "${NGINX_CONF_DIR}/conf.d"
+
+if [ -f "${TEMPLATE_DIR}/nginx.conf.template" ]; then
+    # We use envsubst for system configs usually
+    envsubst "\${NGINX_PORT} \${NGINX_HOST} \${RSTUDIO_PORT}" < "${TEMPLATE_DIR}/nginx.conf.template" > "${NGINX_CONF_DIR}/nginx.conf"
+    log "INFO" "Generated nginx.conf"
+fi
+
+if [ -f "${TEMPLATE_DIR}/nginx_proxy_location.conf.template" ]; then
+    log "INFO" "Processing nginx_proxy_location.conf.template..."
+    
+    export LOG_DIR="/var/log/nginx"
+    export TARGET_RSTUDIO_PORT="${RSTUDIO_PORT:-8787}"
+    export TARGET_WEB_TERMINAL_PORT="${WEB_TERMINAL_PORT:-7681}"
+    export TIMEOUT_SECONDS=$((${RSESSION_TIMEOUT_MINUTES:-10080} * 60))
+    export TARGET_NEXTCLOUD_URL="${NEXTCLOUD_TARGET_URL:-http://localhost:8080}"
+    
+    processed_proxy=""
+    process_template "${TEMPLATE_DIR}/nginx_proxy_location.conf.template" processed_proxy \
+        "LOG_DIR=${LOG_DIR}" \
+        "RSTUDIO_PORT=${TARGET_RSTUDIO_PORT}" \
+        "WEB_TERMINAL_PORT=${TARGET_WEB_TERMINAL_PORT}" \
+        "RSESSION_TIMEOUT_SECONDS=${TIMEOUT_SECONDS}" \
+        "NEXTCLOUD_TARGET_URL=${TARGET_NEXTCLOUD_URL}"
+        
+    echo "$processed_proxy" > "${NGINX_CONF_DIR}/conf.d/proxy_location.conf"
+    log "INFO" "Generated conf.d/proxy_location.conf"
+fi
+
+
+# 2. Process Web Portal HTML/CSS
+# This mirrors logic from scripts/31_setup_web_portal.sh
+current_year=$(date +%Y)
+server_name=$(hostname -s)
+
+ENABLE_TELEMETRY_STRIP="${ENABLE_TELEMETRY_STRIP:-true}"
+telemetry_strip_display="none"
+telemetry_strip_js_enabled="false"
+monitor_tile_display="none"
+if [ "${ENABLE_TELEMETRY_STRIP}" == "true" ]; then
+    telemetry_strip_display="flex"
+    telemetry_strip_js_enabled="true"
+    monitor_tile_display="flex;flex-direction:column"
+fi
+
+if [ -f "${TEMPLATE_DIR}/portal_index.html.template" ]; then
+    log "INFO" "Processing Portal HTML Template..."
+    html_content=""
+    
+    process_template "${TEMPLATE_DIR}/portal_index.html.template" html_content \
+        "CURRENT_YEAR=${current_year}" \
+        "DOMAIN=${HOST_DOMAIN}" \
+        "SERVER_NAME=${server_name}" \
+        "TELEMETRY_STRIP_DISPLAY=${telemetry_strip_display}" \
+        "TELEMETRY_STRIP_JS_ENABLED=${telemetry_strip_js_enabled}" \
+        "MONITOR_TILE_DISPLAY=${monitor_tile_display}"
+    
+    echo "$html_content" > "${WEB_ROOT}/index.html"
+    log "INFO" "Deployed index.html"
+else
+    log "WARN" "portal_index.html.template not found."
+fi
+
+if [ -f "${TEMPLATE_DIR}/portal_style.css.template" ]; then
+    log "INFO" "Processing Portal CSS Template..."
+    css_content=""
+    process_template "${TEMPLATE_DIR}/portal_style.css.template" css_content "PRIMARY_COLOR=#2c3e50" # Example var
+    echo "$css_content" > "${WEB_ROOT}/style.css"
+    log "INFO" "Deployed style.css"
+fi
+
+# 3. Process Wrappers (RStudio / Terminal) if they exist
+# In Docker, we might just proxy, but if using iframes, we need the wrapper HTMLs.
+if [ -f "${TEMPLATE_DIR}/rstudio_wrapper.html.template" ]; then
+    mkdir -p "${WEB_ROOT}/rstudio"
+    cp "${TEMPLATE_DIR}/rstudio_wrapper.html.template" "${WEB_ROOT}/rstudio/index.html"
+    log "INFO" "Deployed RStudio Wrapper"
+fi
+
+if [ -f "${TEMPLATE_DIR}/terminal_wrapper.html.template" ]; then
+    mkdir -p "${WEB_ROOT}/terminal"
+    cp "${TEMPLATE_DIR}/terminal_wrapper.html.template" "${WEB_ROOT}/terminal/index.html"
+    log "INFO" "Deployed Terminal Wrapper"
+fi
+
+if [ -f "${TEMPLATE_DIR}/nextcloud_wrapper.html.template" ]; then
+    mkdir -p "${WEB_ROOT}/files"
+    cp "${TEMPLATE_DIR}/nextcloud_wrapper.html.template" "${WEB_ROOT}/files/index.html"
+    log "INFO" "Deployed Nextcloud Wrapper"
+fi
+
+if [ "${ENABLE_TELEMETRY_STRIP}" == "true" ] && [ -f "${TEMPLATE_DIR}/server_status_wrapper.html.template" ]; then
+    mkdir -p "${WEB_ROOT}/status"
+    status_html=""
+    process_template "${TEMPLATE_DIR}/server_status_wrapper.html.template" status_html "SERVER_NAME=${server_name}"
+    echo "$status_html" > "${WEB_ROOT}/status/index.html"
+    log "INFO" "Deployed Server Status Wrapper"
+fi
+
+# 4. Check Assets
+if [ -d "/usr/share/nginx/html/assets" ]; then
+    # Move assets to root if needed or just leave them.
+    # Logic in 31_setup_web_portal.sh copied them to webroot.
+    cp -r /usr/share/nginx/html/assets/* "${WEB_ROOT}/" 2>/dev/null || true
+    if [ -f "/usr/share/nginx/html/assets/biome-portal.js" ]; then
+        cp "/usr/share/nginx/html/assets/biome-portal.js" "${WEB_ROOT}/biome-portal.js"
+    fi
+fi
+
+
+log "INFO" "Configuration complete. Starting Nginx..."
+exec "$@"

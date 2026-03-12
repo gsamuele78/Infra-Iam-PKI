@@ -1,0 +1,65 @@
+#!/bin/bash
+# /usr/local/bin/ttyd_login_wrapper.sh
+
+# DEBUGGING: Log# To debug, change to a valid path, e.g. /tmp/ttyd_debug.XXXXXX
+# Using mktemp prevents race conditions if multiple users login simultaneously.
+LOG_FILE=$(mktemp /tmp/ttyd_debug_wrapper.XXXXXX)
+# Or set to /dev/null for production
+# LOG_FILE="/dev/null"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Log header
+{
+    echo "============================================"
+    echo "Timestamp: $(date)"
+    echo "Running as: $(id)"
+    echo "--- ENV VARS START ---"
+    printenv
+    echo "--- ENV VARS END ---"
+} >> "$LOG_FILE" 2>&1
+
+# Logic to find the username
+if [ -z "$REMOTE_USER" ]; then
+    if [ -n "$TTYD_USER" ]; then
+         echo "Using TTYD_USER: $TTYD_USER" >> "$LOG_FILE"
+         REMOTE_USER="$TTYD_USER"
+    elif [ -n "$X_FORWARDED_USER" ]; then
+         echo "Using X_FORWARDED_USER: $X_FORWARDED_USER" >> "$LOG_FILE"
+        REMOTE_USER="$X_FORWARDED_USER"
+    else
+        echo "CRITICAL: No username found in env vars." >> "$LOG_FILE"
+        # Dump to stderr as well just in case
+        echo "Error: REMOTE_USER, TTYD_USER, and X_FORWARDED_USER are empty." >&2
+        exit 1
+    fi
+fi
+
+echo "Attempting login for: '$REMOTE_USER'" >> "$LOG_FILE"
+
+# WORKAROUND: TTYD 32-char limit bypass.
+# Nginx strips the domain. We re-append it here.
+if [[ "$REMOTE_USER" != *"@"* ]]; then
+    # Default domain fallback
+    DOMAIN_SUFFIX="@unibo.it"
+    echo "Appending domain suffix: $DOMAIN_SUFFIX" >> "$LOG_FILE"
+    REMOTE_USER="${REMOTE_USER}${DOMAIN_SUFFIX}"
+fi
+
+# Fix unbound variable errors
+export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export LC_BYOBU="${LC_BYOBU:-0}"
+
+# Execute login
+# Loop to allow re-login or clean exit
+while true; do
+    echo "Starting login session for: $REMOTE_USER"
+    /bin/login -f "${REMOTE_USER}"
+    
+    echo ""
+    echo "Session ended."
+    read -p "Press Enter to reconnect or Ctrl+C to close..."
+    clear
+done

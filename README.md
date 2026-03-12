@@ -5,11 +5,12 @@
 
 ## 1. Project Overview
 
-This repository hosts the strict, **Pessimistic Infrastructure-as-Code (IaC)** for the organization's internal Public Key Infrastructure, Identity Management, and HPC Portal. It enforces Zero-Trust principles, Airgap security, and deterministic compute isolation across Docker Compose and Kubernetes deployment targets.
+This repository hosts the strict, **Pessimistic Infrastructure-as-Code (IaC)** for the organization's internal Public Key Infrastructure, Identity Management, HPC Portal, and RStudio compute environment. It enforces Zero-Trust principles, Airgap security, and deterministic compute isolation across Docker Compose and Kubernetes deployment targets.
 
 - **Infra-PKI**: Internal Certificate Authority (`step-ca`) backed by PostgreSQL.
 - **Infra-IAM**: Single Sign-On (`Keycloak`) secured by the PKI and integrated with Active Directory.
 - **Infra-OOD**: The user-facing HPC gateway built on Open OnDemand, authenticating strictly via Keycloak OIDC.
+- **Infra-RStudio**: Precision-engineered RStudio instances with Zero-Trust `oauth2-proxy` sidecars honoring OOD session continuity.
 - **AI Constraints**: Built-in AST validation and hard-constraint generation (`.ai/`, `.agents/`) to enforce strict engineering boundaries automatically.
 
 ---
@@ -20,10 +21,10 @@ This repository hosts the strict, **Pessimistic Infrastructure-as-Code (IaC)** f
 [Remote Clients] <---> [Caddy / Nginx Ingress] <---> [Services]
                                     ^
                                     | (TLS via PKI, Sec via IAM)
-          +-------------------------+-------------------------+
-          |                         |                         |
-    [Infra-PKI]               [Infra-IAM]               [Infra-OOD]
-   (Step-CA/PG)             (Keycloak/PG/AD)        (Apache/PUN/OIDC)
+          +-------------------------+-------------------------+-------------------------+
+          |                         |                         |                         |
+    [Infra-PKI]               [Infra-IAM]               [Infra-OOD]               [Infra-RStudio]     
+   (Step-CA/PG)             (Keycloak/PG/AD)        (Apache/PUN/OIDC)         (RStudio/OAuth2-Proxy)
 ```
 
 ---
@@ -35,8 +36,9 @@ Infra-Iam-PKI/
 ├── infra-pki/                  # PKI Service (Docker Compose)
 ├── infra-iam/                  # IAM Service (Docker Compose)
 ├── infra-ood/                  # Open OnDemand HPC Portal (Docker Compose)
+├── infra-rstudio/              # Zero-Trust RStudio Service (Docker Compose)
 ├── kubernetes-deploy/          # RKE2 Kubernetes Manifests (Production Parity)
-├── sandbox/                    # 3-VM Vagrant Topology for local multi-host testing
+├── sandbox/                    # 4-VM Vagrant Topology for local multi-host testing
 ├── scripts/                    # Automation Toolkit (enrollment, renewal, patching)
 ├── doc/                        # Architectural Documentation
 ├── .ai/                        # Automatic Constraint Generators for AI Coding
@@ -52,7 +54,7 @@ This repository maintains extreme **Production Parity** across three distinct de
 ### 4.1 Kubernetes (RKE2)
 
 The standard production target.
-See `kubernetes-deploy/README.md` for the sequence of `$ kubectl apply -k` commands utilized to launch the PKI, IAM, and OOD isolation namespaces.
+See `kubernetes-deploy/README.md` for the sequence of `$ kubectl apply -k` commands utilized to launch the PKI, IAM, OOD, and RStudio isolation namespaces.
 
 ### 4.2 Docker Compose (Legacy / Edge)
 
@@ -61,6 +63,7 @@ For standalone or edge environments lacking a K8s control plane.
 1. `cd infra-pki && docker compose up -d`
 2. `cd infra-iam && docker compose up -d`
 3. `cd infra-ood && docker compose up -d`
+4. `cd infra-rstudio && docker compose --profile sssd up -d`
 
 ### 4.3 Vagrant Sandbox (Local Validation)
 
@@ -91,6 +94,7 @@ Notable constraints actively enforced:
 - **Infra-PKI**: [Overview](doc/infra-pki/OVERVIEW.md) | [Deploy](doc/infra-pki/DEPLOY.md)
 - **Infra-IAM**: [Overview](doc/infra-iam/OVERVIEW.md) | [Deploy](doc/infra-iam/DEPLOY.md)
 - **Infra-OOD**: [Overview](doc/infra-ood/OVERVIEW.md)
+- **Infra-RStudio**: [Prerequisites & Host Prep](infra-rstudio/doc/PREREQUISITES.md)
 - **Architecture**:
   - [Sandbox Testing Guide](doc/SANDBOX_TESTING.md)
   - [AI Agent Management Constraints](doc/AI_AGENT_MANAGEMENT.md)
