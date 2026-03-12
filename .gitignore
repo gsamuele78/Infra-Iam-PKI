@@ -4,6 +4,8 @@
 .env
 *.env
 !.env.example
+infra-iam/.env
+infra-pki/.env
 
 # Data Directories
 step_data/
