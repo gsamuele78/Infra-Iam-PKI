@@ -1,0 +1,265 @@
+#!/bin/bash
+#set -euo pipefail
+# 09_web_portal_setup.sh - Setup Botanical Big Data Calculus Web Portal
+# Deploys the web portal to /var/www/html and configures Nginx/RStudio integration.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+UTILS_SCRIPT_PATH="${SCRIPT_DIR}/../lib/common_utils.sh"
+TEMPLATE_DIR="${SCRIPT_DIR}/../templates"
+ASSETS_DIR="${SCRIPT_DIR}/../assets"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+WEB_ROOT="/var/www/html"
+
+if [[ ! -f "$UTILS_SCRIPT_PATH" ]]; then
+    echo "Error: common_utils.sh not found at $UTILS_SCRIPT_PATH" >&2
+    exit 1
+fi
+# shellcheck source=../lib/common_utils.sh disable=SC1091
+source "$UTILS_SCRIPT_PATH"
+
+LOG_FILE="/var/log/botanical/portal_setup.log"
+
+# ── Telemetry Strip Feature Flag ──
+# Set to 'true' to include the pre-login CPU/RAM/sessions strip on the portal.
+# Requires: 40_install_telemetry.sh has been run and botanical-telemetry.service is active.
+# Set to 'false' to hide it completely (e.g. if telemetry is not deployed).
+ENABLE_TELEMETRY_STRIP="${ENABLE_TELEMETRY_STRIP:-true}"
+
+setup_logging() {
+    mkdir -p "$(dirname "$LOG_FILE")"
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    log "INFO" "--- Setup Started: $(date) ---"
+}
+
+uninstall_portal() {
+    log "WARN" "Starting Portal Uninstallation..."
+    
+    # 1. Remove files
+    log "INFO" "Removing portal files..."
+    
+    rm -f "${WEB_ROOT}/index.html" "${WEB_ROOT}/style.css" "${WEB_ROOT}/left.png" "${WEB_ROOT}/center.png" "${WEB_ROOT}/right.png" "${WEB_ROOT}/background.png" "${WEB_ROOT}/biome-portal.js"
+    rm -rf "${WEB_ROOT}/status"
+
+    log "INFO" "Uninstallation complete. Note: Nginx proxy config remains active (serving 404/403 on root)."
+    log "INFO" "To restore Nginx to default, verify /etc/nginx/sites-enabled configuration."
+}
+
+deploy_portal() {
+    local template_name="$1" # e.g., portal_index.html.template or portal_index_simple.html.template
+    if [[ -z "$template_name" ]]; then
+        template_name="portal_index.html.template"
+    fi
+
+    log "INFO" "Deploying Web Portal using template: $template_name..."
+    ensure_dir_exists "$WEB_ROOT"
+    
+    # Clean existing default nginx page if it exists (index.nginx-debian.html or simple index.html)
+    # Only remove if we are deploying, to avoid conflicts.
+    if [[ -f "${WEB_ROOT}/index.nginx-debian.html" ]]; then rm -f "${WEB_ROOT}/index.nginx-debian.html"; fi
+    
+    local current_year; current_year=$(date +%Y)
+    local server_name;   server_name=$(hostname -s)
+    
+    # ── Template variable substitutions ──
+    # Telemetry strip feature flags for portal template
+    local telemetry_strip_display="none"
+    local telemetry_strip_js_enabled="false"
+    local monitor_tile_display="none"
+    if [[ "${ENABLE_TELEMETRY_STRIP}" == "true" ]]; then
+        telemetry_strip_display="flex"
+        telemetry_strip_js_enabled="true"
+        monitor_tile_display="flex;flex-direction:column"
+    fi
+
+    log "INFO" "Processing templates..."
+    local html_content
+    if ! process_template "${TEMPLATE_DIR}/${template_name}" html_content \
+        "CURRENT_YEAR=${current_year}" \
+        "SERVER_NAME=${server_name}" \
+        "TELEMETRY_STRIP_DISPLAY=${telemetry_strip_display}" \
+        "TELEMETRY_STRIP_JS_ENABLED=${telemetry_strip_js_enabled}" \
+        "MONITOR_TILE_DISPLAY=${monitor_tile_display}"; then
+        handle_error 1 "Failed to process ${template_name}"
+        return 1
+    fi
+    echo "$html_content" > "${WEB_ROOT}/index.html"
+    
+    local css_content
+    if ! process_template "${TEMPLATE_DIR}/portal_style.css.template" css_content; then
+         handle_error 1 "Failed to process portal_style.css.template"
+         return 1
+    fi
+    echo "$css_content" > "${WEB_ROOT}/style.css"
+    
+    log "INFO" "Deploying left asset..."
+    if [[ -f "${ASSETS_DIR}/left.png" ]]; then
+        cp "${ASSETS_DIR}/left.png" "${WEB_ROOT}/left.png"
+    else
+        log "WARN" "Left asset not found at ${ASSETS_DIR}/left.png"
+    fi
+    
+    log "INFO" "Deploying center asset..."
+    if [[ -f "${ASSETS_DIR}/center.png" ]]; then
+        cp "${ASSETS_DIR}/center.png" "${WEB_ROOT}/center.png"
+    else
+        log "WARN" "Center asset not found at ${ASSETS_DIR}/center.png"
+    fi
+
+    log "INFO" "Deploying right asset..."
+    if [[ -f "${ASSETS_DIR}/right.png" ]]; then
+        cp "${ASSETS_DIR}/right.png" "${WEB_ROOT}/right.png"
+    else
+        log "WARN" "Right asset not found at ${ASSETS_DIR}/right.png"
+    fi
+
+    log "INFO" "Deploying background asset..."
+    if [[ -f "${ASSETS_DIR}/background.png" ]]; then
+        cp "${ASSETS_DIR}/background.png" "${WEB_ROOT}/background.png"
+    else
+        log "WARN" "Background asset not found at ${ASSETS_DIR}/background.png"
+    fi
+
+    # Shared JS library (lib/biome-portal.js → /biome-portal.js)
+    if [[ -f "${LIB_DIR}/biome-portal.js" ]]; then
+        cp "${LIB_DIR}/biome-portal.js" "${WEB_ROOT}/biome-portal.js"
+        log "INFO" "Deployed shared JS library: biome-portal.js"
+    else
+        log "WARN" "Shared JS library not found at ${LIB_DIR}/biome-portal.js — portal nav and telemetry utils will not work!"
+    fi
+    
+    run_command "Set permissions for web root" "chown -R www-data:www-data ${WEB_ROOT} && chmod -R 755 ${WEB_ROOT}"
+    
+    log "INFO" "Portal deployed successfully to ${WEB_ROOT}."
+
+    log "INFO" "Deploying Application Wrappers (Iframe Architecture)..."
+    
+    # Terminal Wrapper
+    if [[ -f "${TEMPLATE_DIR}/terminal_wrapper.html.template" ]]; then
+        ensure_dir_exists "${WEB_ROOT}/terminal"
+        cp "${TEMPLATE_DIR}/terminal_wrapper.html.template" "${WEB_ROOT}/terminal/index.html"
+        log "INFO" "Deployed Terminal Wrapper."
+    else
+        log "WARN" "Terminal wrapper template not found."
+    fi
+
+    # RStudio Wrapper
+    if [[ -f "${TEMPLATE_DIR}/rstudio_wrapper.html.template" ]]; then
+        ensure_dir_exists "${WEB_ROOT}/rstudio"
+        cp "${TEMPLATE_DIR}/rstudio_wrapper.html.template" "${WEB_ROOT}/rstudio/index.html"
+        log "INFO" "Deployed RStudio Wrapper."
+    else
+        log "WARN" "RStudio wrapper template not found."
+    fi
+
+    # Nextcloud Wrapper
+    if [[ -f "${TEMPLATE_DIR}/nextcloud_wrapper.html.template" ]]; then
+        ensure_dir_exists "${WEB_ROOT}/files"
+        cp "${TEMPLATE_DIR}/nextcloud_wrapper.html.template" "${WEB_ROOT}/files/index.html"
+        log "INFO" "Deployed Nextcloud Wrapper."
+    else
+        log "WARN" "Nextcloud wrapper template not found."
+    fi
+
+    # Server Status Wrapper (Grafana-style detail page — /status/)
+    if [[ "${ENABLE_TELEMETRY_STRIP}" == "true" ]]; then
+        if [[ -f "${TEMPLATE_DIR}/server_status_wrapper.html.template" ]]; then
+            ensure_dir_exists "${WEB_ROOT}/status"
+            local status_html
+            if process_template "${TEMPLATE_DIR}/server_status_wrapper.html.template" status_html \
+                "SERVER_NAME=${server_name}"; then
+                echo "$status_html" > "${WEB_ROOT}/status/index.html"
+                log "INFO" "Deployed Server Status Wrapper to ${WEB_ROOT}/status/ (server: ${server_name})."
+            else
+                handle_error 1 "Failed to process server_status_wrapper.html.template"
+            fi
+        else
+            log "WARN" "server_status_wrapper.html.template not found — /status/ page not deployed."
+        fi
+    else
+        log "INFO" "Telemetry strip disabled — skipping /status/ deployment."
+    fi
+
+    # Set permissions for all wrappers
+    run_command "Set permissions for web root" "chown -R www-data:www-data ${WEB_ROOT} && chmod -R 755 ${WEB_ROOT}"
+}
+
+
+show_help() {
+    echo "Usage: $0 [--uninstall]"
+    echo "  --uninstall   Remove the portal files (HTML/CSS/Images)."
+    echo "  (No arguments) Deploys the web portal files to $WEB_ROOT."
+}
+
+show_menu() {
+    echo ""
+    printf "\n=== Botanical Web Portal Setup ===\n"
+    printf "  Telemetry Strip: %s\n" "$ENABLE_TELEMETRY_STRIP"
+    printf "1) Deploy Secure Web Portal (Front-end Auth Lock + Telemetry Strip)\n"
+    printf "2) Deploy Simple Web Portal (Direct Links, No Lock)\n"
+    printf "3) Deploy Secure Portal (No Telemetry Strip)\n"
+    printf "4) Uninstall Web Portal\n"
+    printf "5) Exit\n"
+    read -r -p "Choice: " choice
+    
+    case "$choice" in
+        1)
+            log "INFO" "--- Starting Secure Web Portal Setup (With Telemetry) ---"
+            ENABLE_TELEMETRY_STRIP=true
+            deploy_portal "portal_index.html.template"
+            log "INFO" "--- Web Portal Setup Complete ---"
+            ;;
+        2)
+            log "INFO" "--- Starting Simple Web Portal Setup ---"
+            ENABLE_TELEMETRY_STRIP=false
+            deploy_portal "portal_index_simple.html.template"
+            log "INFO" "--- Web Portal Setup Complete ---"
+            ;;
+        3)
+            log "INFO" "--- Starting Secure Web Portal Setup (No Telemetry) ---"
+            ENABLE_TELEMETRY_STRIP=false
+            deploy_portal "portal_index.html.template"
+            log "INFO" "--- Web Portal Setup Complete ---"
+            ;;
+        4)
+            uninstall_portal
+            ;;
+        5)
+            log "INFO" "Exiting."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option."
+            show_menu
+            ;;
+    esac
+    
+    if [[ "$choice" == "1" || "$choice" == "2" || "$choice" == "3" || "$choice" == "4" ]]; then
+        log "INFO" "Restarting Nginx to apply changes..."
+        if run_command "Restart Nginx" "systemctl restart nginx"; then
+            log "INFO" "Nginx restarted successfully."
+        else
+            log "ERROR" "Failed to restart Nginx. Please check 'systemctl status nginx'."
+        fi
+        
+        log "INFO" "Logs saved to: $LOG_FILE"
+        if [[ "$choice" != "3" ]]; then
+             log "INFO" "NOTE: Static Portal configured."
+        fi
+    fi
+}
+
+main() {
+    setup_logging
+    
+    if [[ "$1" == "--uninstall" ]]; then
+        uninstall_portal
+        exit 0
+    elif [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        show_help
+        exit 0
+    else
+        show_menu
+    fi
+}
+
+main "$@"

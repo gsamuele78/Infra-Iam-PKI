@@ -1,12 +1,13 @@
 #!/bin/bash
-set -euo pipefail
 # samba_kerberos_setup.sh - Samba + Kerberos join and configuration helper
 # Uses common utilities (`process_template`, `run_command`, logging helpers)
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-UTILS_SCRIPT_PATH="${SCRIPT_DIR}/../../infra-rstudio/lib/common_utils.sh"
+set -euo pipefail
 
-TEMPLATE_DIR="${SCRIPT_DIR}/../../infra-rstudio/templates"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+UTILS_SCRIPT_PATH="${SCRIPT_DIR}/../lib/common_utils.sh"
+CONF_VARS_FILE="${SCRIPT_DIR}/../config/join_domain_samba.vars.conf"
+TEMPLATE_DIR="${SCRIPT_DIR}/../templates"
 SMB_CONF_PATH_DEFAULT="/etc/samba/smb.conf"
 
 KERBEROS_SETUP_SCRIPT="${SCRIPT_DIR}/12_lib_kerberos_setup.sh"
@@ -15,39 +16,16 @@ if [[ ! -f "$UTILS_SCRIPT_PATH" ]]; then
     printf "Error: common_utils.sh not found at %s\n" "$UTILS_SCRIPT_PATH" >&2
     exit 1
 fi
+# shellcheck source=../lib/common_utils.sh disable=SC1091
 source "$UTILS_SCRIPT_PATH"
 
 # Source shared Kerberos setup script functions
 if [[ -f "$KERBEROS_SETUP_SCRIPT" ]]; then
+    # shellcheck source=12_lib_kerberos_setup.sh disable=SC1091
     source "$KERBEROS_SETUP_SCRIPT"
 else
     log "ERROR: Kerberos setup script not found at $KERBEROS_SETUP_SCRIPT"
     exit 1
-fi
-
-# Docker Deploy: Source .env instead of legacy config (moved to top for precedence)
-if [ -f "${SCRIPT_DIR}/../../infra-rstudio/.env" ]; then
-    log "INFO" "Sourcing configuration from .env..."
-    set -a
-    source "${SCRIPT_DIR}/../../infra-rstudio/.env"
-    set +a
-    
-    # Map .env vars to script vars if needed
-    if [ -n "$HOST_DOMAIN" ]; then
-        AD_DOMAIN_LOWER=$(echo "$HOST_DOMAIN" | cut -d. -f2-)
-        DEFAULT_AD_DOMAIN_LOWER="${DEFAULT_AD_DOMAIN_LOWER:-$AD_DOMAIN_LOWER}"
-    fi
-
-    # Map DEFAULT_ variables from .env to script variables
-    # This ensures .env values override embedded defaults below
-    COMPUTER_OU_BASE="${DEFAULT_COMPUTER_OU_BASE:-$COMPUTER_OU_BASE}"
-    COMPUTER_OU_CUSTOM_PART="${DEFAULT_COMPUTER_OU_CUSTOM_PART:-$COMPUTER_OU_CUSTOM_PART}"
-    OS_NAME="${DEFAULT_OS_NAME:-$OS_NAME}"
-    SIMPLE_ALLOW_GROUPS="${DEFAULT_SIMPLE_ALLOW_GROUPS:-$SIMPLE_ALLOW_GROUPS}"
-    REALM="${DEFAULT_AD_DOMAIN_UPPER:-$REALM}"
-    WORKGROUP="${WORKGROUP:-PERSONALE}" # .env doesn't usually set WORKGROUP, defaulting is fine or map if needed
-else
-    log "WARN" ".env file not found at ${SCRIPT_DIR}/../../infra-rstudio/.env"
 fi
 
 # === SET EMBEDDED DEFAULTS FIRST ===
@@ -77,7 +55,13 @@ DEFAULT_SAMBA_SMB_CONF_PATH="${DEFAULT_SAMBA_SMB_CONF_PATH:-/etc/samba/smb.conf}
 USE_WINBIND="${USE_WINBIND:-false}"
 
 # === SOURCE CONFIG FILE (overlays defaults) ===
-
+if [[ -f "$CONF_VARS_FILE" ]]; then
+    log "Sourcing Samba Kerberos configuration variables from $CONF_VARS_FILE"
+    # shellcheck source=../config/join_domain_samba.vars.conf disable=SC1091
+    source "$CONF_VARS_FILE"
+else
+    log "Warning: Samba Kerberos vars file not found; using embedded defaults."
+fi
 
 # Map DEFAULT_ config variables (from config file) into runtime IDMAP_ variables
 # This allows config files to set DEFAULT_IDMAP_* while the script uses IDMAP_* names
@@ -93,9 +77,7 @@ fi
 if [[ -n "${DEFAULT_IDMAP_STAR_RANGE_HIGH:-}" ]]; then
     IDMAP_STAR_RANGE_HIGH="${IDMAP_STAR_RANGE_HIGH:-${DEFAULT_IDMAP_STAR_RANGE_HIGH}}"
 fi
-if [[ -n "${DEFAULT_IDMAP_BACKEND_DOMAIN:-}" ]]; then
-    DEFAULT_IDMAP_BACKEND_DOMAIN="${DEFAULT_IDMAP_BACKEND_DOMAIN}"
-fi
+
 
 # === VERIFY ALL CRITICAL VARIABLES ARE SET ===
 # If config file didn't set them or they're empty, use defaults (second pass)
@@ -134,7 +116,7 @@ install_prereqs() {
     log "INFO" "Purging SSSD packages to prevent conflicts..."
     local sssd_pkgs
     # Look for installed packages with 'sss' in the package name (sssd, libnss-sss, libpam-sss, etc.)
-    sssd_pkgs=($(dpkg -l 2>/dev/null | awk '/^ii/ && $2 ~ /sss/ {print $2}')) || sssd_pkgs=()
+    read -r -a sssd_pkgs <<< "$(dpkg -l 2>/dev/null | awk '/^ii/ && $2 ~ /sss/ {print $2}' | tr '\n' ' ')" || sssd_pkgs=()
     if [[ ${#sssd_pkgs[@]} -gt 0 ]]; then
         log "DEBUG" "Detected SSSD-related packages to purge: ${sssd_pkgs[*]}"
         if ! run_command "apt-get purge -y ${sssd_pkgs[*]}"; then
@@ -635,10 +617,12 @@ deploy_smb_conf() {
              # Print file up to [global]
              sed -n "1,${global_line}p" "${dest_path}" > "${tmp_smb}"
              # Inject lines
-             printf "   security = ads\n" >> "${tmp_smb}"
-             printf "   realm = %s\n" "${REALM}" >> "${tmp_smb}"
-             printf "   workgroup = %s\n" "${WORKGROUP}" >> "${tmp_smb}"
-             printf "   kerberos method = secrets and keytab\n" >> "${tmp_smb}"
+             {
+                 printf "   security = ads\n"
+                 printf "   realm = %s\n" "${REALM}"
+                 printf "   workgroup = %s\n" "${WORKGROUP}"
+                 printf "   kerberos method = secrets and keytab\n"
+             } >> "${tmp_smb}"
              # Print rest of file
              sed -n "$((global_line + 1)),\$p" "${dest_path}" >> "${tmp_smb}"
              
@@ -659,14 +643,18 @@ deploy_smb_conf() {
         if grep -q -i "^idmap config ${WORKGROUP} :.*range" "${dest_path}"; then
             run_command "sed -i -r 's|^idmap config ${WORKGROUP} : [[:space:]]*range = .*|idmap config ${WORKGROUP} : range = ${IDMAP_PERSONALE_RANGE_LOW}-${IDMAP_PERSONALE_RANGE_HIGH}|I' ${dest_path}" || true
         else
-            printf "\n# ID mapping for AD domain ${WORKGROUP}\n" >> "${dest_path}"
-            printf "idmap config ${WORKGROUP} : backend = rid\n" >> "${dest_path}"
-            printf "idmap config ${WORKGROUP} : range = ${IDMAP_PERSONALE_RANGE_LOW}-${IDMAP_PERSONALE_RANGE_HIGH}\n" >> "${dest_path}"
+            {
+                printf "\n# ID mapping for AD domain %s\n" "${WORKGROUP}"
+                printf "idmap config %s : backend = rid\n" "${WORKGROUP}"
+                printf "idmap config %s : range = %s-%s\n" "${WORKGROUP}" "${IDMAP_PERSONALE_RANGE_LOW}" "${IDMAP_PERSONALE_RANGE_HIGH}"
+            } >> "${dest_path}"
         fi
     else
-        printf "\n# ID mapping for AD domain ${WORKGROUP}\n" >> "${dest_path}"
-        printf "idmap config ${WORKGROUP} : backend = rid\n" >> "${dest_path}"
-        printf "idmap config ${WORKGROUP} : range = ${IDMAP_PERSONALE_RANGE_LOW}-${IDMAP_PERSONALE_RANGE_HIGH}\n" >> "${dest_path}"
+        {
+            printf "\n# ID mapping for AD domain %s\n" "${WORKGROUP}"
+            printf "idmap config %s : backend = rid\n" "${WORKGROUP}"
+            printf "idmap config %s : range = %s-%s\n" "${WORKGROUP}" "${IDMAP_PERSONALE_RANGE_LOW}" "${IDMAP_PERSONALE_RANGE_HIGH}"
+        } >> "${dest_path}"
     fi
 
     # Ensure winbind nss info for RFC2307 attribute support and allow shortname/UPN logins
@@ -964,8 +952,8 @@ test_samba_installation() {
     run_command "smbd --version"
     run_command "winbindd --version"
     log "Checking if services are running..."
-    systemctl is-active --quiet smbd && log "smbd is active." || log "smbd is NOT active."
-    systemctl is-active --quiet winbind && log "winbind is active." || log "winbind is NOT active."
+    if systemctl is-active --quiet smbd; then log "smbd is active."; else log "smbd is NOT active."; fi
+    if systemctl is-active --quiet winbind; then log "winbind is active."; else log "winbind is NOT active."; fi
     log "Samba installation test complete."
     return 0
 }
@@ -1055,7 +1043,7 @@ main_menu() {
     printf "L) View Samba/Winbind logs\n"
     printf "4) Exit\n"
     read -r -p "Choice: " choice
-    local final_smb=""
+    read -r -p "Choice: " choice
     case "$choice" in
         1)
             read -r -p "Enter AD admin username (default: $DEFAULT_AD_ADMIN_USER_EXAMPLE): " admin_user
