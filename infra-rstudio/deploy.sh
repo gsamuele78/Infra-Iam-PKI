@@ -3,14 +3,10 @@
 # Master Deployment Script for Botanical Docker Infrastructure
 # Handles .env validation, build, and verification.
 
-set -euo pipefail
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
-
-# Dependency Assertion (HC-13)
-command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required but not installed."; exit 1; }
-command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required but not installed."; exit 1; }
 
 # Colors
 GREEN='\033[0;32m'
@@ -39,17 +35,20 @@ if [ -f "${SCRIPT_DIR}/scripts/manage_pki_trust.sh" ]; then
 fi
 
 log "Loading Configuration from .env..."
-# Only read explicitly rather than sourcing to prevent arbitrary execution
-AUTH_BACKEND=$(grep "^AUTH_BACKEND=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "")
-HOST_DOMAIN=$(grep "^HOST_DOMAIN=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "")
-RSTUDIO_PORT=$(grep "^RSTUDIO_PORT=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "8787")
-HTTPS_PORT=$(grep "^HTTPS_PORT=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "443")
+set -a
+source "$ENV_FILE"
+set +a
 
 log "Target Backend: ${GREEN}${AUTH_BACKEND}${NC}"
 log "Domain: ${HOST_DOMAIN}"
 
 # 2. Build & Launch
 log "Building and Starting Docker Stack..."
+
+# We construct the compose command based on profiles
+# Always include 'portal' if we want the nginx container?
+# User might want just RStudio. 
+# We'll assume full stack deployment for this script.
 
 COMPOSE_CMD="docker compose --profile ${AUTH_BACKEND} --profile portal"
 

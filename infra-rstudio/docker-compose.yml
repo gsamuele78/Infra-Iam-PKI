@@ -1,11 +1,163 @@
-# infra-rstudio/docker-compose.yml
-# Botanical RStudio Integration
-# Applying pessimistic engineering, Zero-Trust (OIDC), strict resource constraints.
----
+version: '3.8'
 
 services:
-  # --- Docker Socket Proxy for Telemetry ---
-  # Only this proxy touches the real socket.
+  # --- RStudio Service (SSSD Backend) ---
+  rstudio-sssd:
+    profiles: [ "sssd" ]
+    build:
+      context: .
+      dockerfile: Dockerfile.sssd
+    image: ${RSTUDIO_SSSD_IMAGE:-rstudio-botanical-sssd}:${IMAGE_TAG:-latest}
+    container_name: rstudio_pet
+    restart: unless-stopped
+    network_mode: "host"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: ${RSTUDIO_MEMORY_LIMIT:-16G}
+          cpus: ${RSTUDIO_CPU_LIMIT:-0.0}
+    cap_drop:
+      - SYS_CHROOT
+    # Translate /etc/fstab /tmp ramdisk to Docker tmpfs
+    tmpfs:
+      - /tmp:rw,size=${RAMDISK_SIZE:-16G},uid=0,gid=0,mode=1777
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:${RSTUDIO_PORT:-8787}/auth-sign-in || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    environment:
+      - AUTH_BACKEND=sssd
+      - USERID=${DOCKER_USERID:-1000}
+      - GROUPID=${DOCKER_GROUPID:-1000}
+      - MAX_BLAS_THREADS=${MAX_BLAS_THREADS:-16}
+      - BIOME_CONTACT=${BIOME_CONTACT:-support@botanical.example.com}
+      - BIOME_CONF=${BIOME_CONF:-/etc/biome-calc}
+    volumes:
+      - ${HOST_HOME_DIR}:/home
+      - ${HOST_PROJECT_ROOT}:/nfs/home
+      - ${HOST_SSS_PIPES:-/var/lib/sss/pipes}:/var/lib/sss/pipes:rw
+      - ${HOST_SSS_MC:-/var/lib/sss/mc}:/var/lib/sss/mc:ro
+      - ${HOST_SSSD_CONF:-/etc/sssd/sssd.conf}:/etc/sssd/sssd.conf:ro
+      - ${HOST_KRB5_CONF:-/etc/krb5.conf}:/etc/krb5.conf:ro
+      - ${HOST_NSSWITCH_CONF:-/etc/nsswitch.conf}:/etc/nsswitch.conf:ro
+      # Step-CA Root Trust
+      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
+      # Python Geospatial Venv
+      - ${PYTHON_ENV:-/opt/r-geospatial}:/opt/r-geospatial:ro
+
+  # --- RStudio Service (Samba Backend) ---
+  rstudio-samba:
+    profiles: [ "samba" ]
+    build:
+      context: .
+      dockerfile: Dockerfile.samba
+    image: ${RSTUDIO_SAMBA_IMAGE:-rstudio-botanical-samba}:${IMAGE_TAG:-latest}
+    container_name: rstudio_pet
+    restart: unless-stopped
+    network_mode: "host"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: ${RSTUDIO_MEMORY_LIMIT:-16G}
+          cpus: ${RSTUDIO_CPU_LIMIT:-0.0}
+    cap_drop:
+      - SYS_CHROOT
+    # Translate /etc/fstab /tmp ramdisk to Docker tmpfs
+    tmpfs:
+      - /tmp:rw,size=${RAMDISK_SIZE:-16G},uid=0,gid=0,mode=1777
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:${RSTUDIO_PORT:-8787}/auth-sign-in || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    environment:
+      - AUTH_BACKEND=samba
+      - MAX_BLAS_THREADS=${MAX_BLAS_THREADS:-16}
+      - BIOME_CONTACT=${BIOME_CONTACT:-support@botanical.example.com}
+      - BIOME_CONF=${BIOME_CONF:-/etc/biome-calc}
+    volumes:
+      - ${HOST_HOME_DIR}:/home
+      - ${HOST_PROJECT_ROOT}:/nfs/home
+      - ${HOST_WINBINDD_DIR:-/var/run/samba/winbindd}:/var/run/samba/winbindd:rw
+      - ${HOST_SAMBA_DIR:-/var/lib/samba}:/var/lib/samba:rw
+      - ${HOST_SMB_CONF:-/etc/samba/smb.conf}:/etc/samba/smb.conf:ro
+      - ${HOST_KRB5_CONF:-/etc/krb5.conf}:/etc/krb5.conf:ro
+      - ${HOST_NSSWITCH_CONF:-/etc/nsswitch.conf}:/etc/nsswitch.conf:ro
+      # Step-CA Root Trust
+      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
+      # Python Geospatial Venv
+      - ${PYTHON_ENV:-/opt/r-geospatial}:/opt/r-geospatial:ro
+
+  # --- Nginx Portal Service ---
+  nginx-portal:
+    profiles: [ "portal" ]
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: ${PORTAL_NGINX_IMAGE:-botanical-portal-nginx}:${IMAGE_TAG:-latest}
+    container_name: nginx_portal
+    restart: unless-stopped
+    network_mode: "host"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: ${NGINX_MEMORY_LIMIT:-256M}
+          cpus: ${NGINX_CPU_LIMIT:-1.0}
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -k -f -s https://localhost:${HTTPS_PORT:-443}/ || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      # Mount assets and templates to context paths if dev changes needed
+      # But Dockerfile copies them in. We might want read-only mounts for live updates?
+      # Let's rely on Image build for stability as per "Pet" design.
+      # Just mount SSL.
+      # Just mount SSL.
+      - ${SSL_CERT_PATH}:/etc/ssl/certs/server.crt:ro
+      - ${SSL_KEY_PATH}:/etc/ssl/private/server.key:ro
+      # Step-CA Root Trust
+      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
+    environment:
+      - NGINX_HOST=${HOST_DOMAIN}
+      - NGINX_PORT=${HTTPS_PORT}
+      - RSTUDIO_PORT=${RSTUDIO_PORT}
+      - ENABLE_TELEMETRY_STRIP=${ENABLE_TELEMETRY_STRIP:-true}
+
+  # --- OAuth2-Proxy Sidecar (OIDC Authentication) ---
+  oauth2-proxy:
+    profiles: [ "oidc" ]
+    image: ${OAUTH2_PROXY_IMAGE:-quay.io/oauth2-proxy/oauth2-proxy}:${OAUTH2_PROXY_TAG:-v7.6.0}
+    container_name: oauth2_proxy
+    restart: unless-stopped
+    command:
+      - --config=/etc/oauth2-proxy.cfg
+    volumes:
+      - ${OAUTH2_PROXY_CONFIG:-./config/oauth2-proxy.cfg}:/etc/oauth2-proxy.cfg:ro
+    network_mode: "host"
+    deploy:
+      resources:
+        limits:
+          memory: ${OAUTH2_MEMORY_LIMIT:-128M}
+          cpus: ${OAUTH2_CPU_LIMIT:-0.5}
+
+  # --- Docker Socket Proxy (HC-09 Isolation) ---
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:0.3.0
     container_name: rstudio_socket_proxy
@@ -20,179 +172,46 @@ services:
       resources:
         limits:
           memory: 128M
-          cpus: '0.2'
-    logging: &default-logging
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  # --- RStudio Service (SSSD Backend) ---
-  rstudio-sssd:
-    profiles: [ "sssd" ]
-    build:
-      context: .
-      dockerfile: Dockerfile.sssd
-    image: ${RSTUDIO_SSSD_IMAGE:-rstudio-botanical-sssd:v1.0.0}
-    container_name: rstudio_pet
-    restart: unless-stopped
-    network_mode: "host"
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: ${RSTUDIO_MEMORY_LIMIT:-16G}
-          cpus: ${RSTUDIO_CPU_LIMIT:-4.0}
-    cap_drop:
-      - SYS_CHROOT
-    tmpfs:
-      - /tmp:rw,size=${RAMDISK_SIZE:-8G},uid=0,gid=0,mode=1777
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:${RSTUDIO_PORT:-8787}/auth-sign-in || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    environment:
-      - AUTH_BACKEND=sssd
-      - USERID=${DOCKER_USERID:-1000}
-      - GROUPID=${DOCKER_GROUPID:-1000}
-      - MAX_BLAS_THREADS=${MAX_BLAS_THREADS:-16}
-    volumes:
-      - ${HOST_HOME_DIR:-/home}:/home
-      - ${HOST_PROJECT_ROOT:-/nfs/home}:/nfs/home
-      - ${HOST_SSS_PIPES:-/var/lib/sss/pipes}:/var/lib/sss/pipes:rw
-      - ${HOST_SSS_MC:-/var/lib/sss/mc}:/var/lib/sss/mc:ro
-      - ${HOST_SSSD_CONF:-/etc/sssd/sssd.conf}:/etc/sssd/sssd.conf:ro
-      - ${HOST_KRB5_CONF:-/etc/krb5.conf}:/etc/krb5.conf:ro
-      - ${HOST_NSSWITCH_CONF:-/etc/nsswitch.conf}:/etc/nsswitch.conf:ro
-      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
-      - ${PYTHON_ENV:-/opt/r-geospatial}:/opt/r-geospatial:ro
-    depends_on:
-      - docker-socket-proxy
-
-  # --- RStudio Service (Samba Backend) ---
-  rstudio-samba:
-    profiles: [ "samba" ]
-    build:
-      context: .
-      dockerfile: Dockerfile.samba
-    image: ${RSTUDIO_SAMBA_IMAGE:-rstudio-botanical-samba:v1.0.0}
-    container_name: rstudio_pet
-    restart: unless-stopped
-    network_mode: "host"
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: ${RSTUDIO_MEMORY_LIMIT:-16G}
-          cpus: ${RSTUDIO_CPU_LIMIT:-4.0}
-    cap_drop:
-      - SYS_CHROOT
-    tmpfs:
-      - /tmp:rw,size=${RAMDISK_SIZE:-8G},uid=0,gid=0,mode=1777
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:${RSTUDIO_PORT:-8787}/auth-sign-in || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    environment:
-      - AUTH_BACKEND=samba
-      - USERID=${DOCKER_USERID:-1000}
-      - GROUPID=${DOCKER_GROUPID:-1000}
-      - MAX_BLAS_THREADS=${MAX_BLAS_THREADS:-16}
-    volumes:
-      - ${HOST_HOME_DIR:-/home}:/home
-      - ${HOST_PROJECT_ROOT:-/nfs/home}:/nfs/home
-      - ${HOST_WINBINDD_DIR:-/var/run/samba/winbindd}:/var/run/samba/winbindd:rw
-      - ${HOST_SAMBA_DIR:-/var/lib/samba}:/var/lib/samba:rw
-      - ${HOST_SMB_CONF:-/etc/samba/smb.conf}:/etc/samba/smb.conf:ro
-      - ${HOST_KRB5_CONF:-/etc/krb5.conf}:/etc/krb5.conf:ro
-      - ${HOST_NSSWITCH_CONF:-/etc/nsswitch.conf}:/etc/nsswitch.conf:ro
-      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
-      - ${PYTHON_ENV:-/opt/r-geospatial}:/opt/r-geospatial:ro
-    depends_on:
-      - docker-socket-proxy
-
-  # --- Nginx Portal Service ---
-  nginx-portal:
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx
-    image: ${PORTAL_NGINX_IMAGE:-botanical-portal-nginx:v1.0.0}
-    container_name: nginx_portal
-    restart: unless-stopped
-    network_mode: "host"
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -k -f -s https://localhost:${HTTPS_PORT:-443}/ || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    volumes:
-      - ${SSL_CERT_PATH:-/etc/ssl/certs/server.crt}:/etc/ssl/certs/server.crt:ro
-      - ${SSL_KEY_PATH:-/etc/ssl/private/server.key}:/etc/ssl/private/server.key:ro
-      - ${STEP_CA_ROOT_PATH:-/etc/ssl/certs/step-ca-root.crt}:/usr/local/share/ca-certificates/step-ca-root.crt:ro
-    environment:
-      - NGINX_HOST=${HOST_DOMAIN:-localhost}
-      - NGINX_PORT=${HTTPS_PORT:-443}
-      - RSTUDIO_PORT=${RSTUDIO_PORT:-8787}
-      - ENABLE_TELEMETRY_STRIP=${ENABLE_TELEMETRY_STRIP:-true}
-
-  # --- OAuth2-Proxy Sidecar (OIDC Authentication) ---
-  oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-    container_name: oauth2_proxy
-    restart: unless-stopped
-    command:
-      - --config=/etc/oauth2-proxy.cfg
-    volumes:
-      - ./config/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
-    network_mode: "host"
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 256M
           cpus: '0.5'
 
   # --- Telemetry & Metrics API ---
   telemetry-api:
+    profiles: [ "portal" ]
     build:
       context: .
       dockerfile: Dockerfile.telemetry
-    image: ${TELEMETRY_API_IMAGE:-botanical-telemetry-api:v1.0.0}
+    image: ${TELEMETRY_API_IMAGE:-botanical-telemetry-api}:${IMAGE_TAG:-latest}
     container_name: telemetry_api
     restart: unless-stopped
     network_mode: "host"
     pid: "host"
-    logging: *default-logging
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
     volumes:
+      # Mount host root filesystem read-only to let psutil examine host disks
       - ${TELEMETRY_HOST_ROOT:-/}:/hostfs:ro
       - ${TELEMETRY_HOST_RUN:-/var/run}:/var/run:ro
     environment:
-      # Connect to proxy instead of socket mount
       - DOCKER_HOST=tcp://127.0.0.1:2375
+      # Tell telemetry to look for disk paths on /hostfs
       - NFS_HOME=${TELEMETRY_NFS_HOME:-/hostfs/nfs/home}
       - PROJECTS_DIR=${TELEMETRY_PROJECTS_DIR:-/hostfs/nfs/projects}
       - TMP_DIR=${TELEMETRY_TMP_DIR:-/hostfs/tmp}
+    deploy:
+      resources:
+        limits:
+          memory: ${TELEMETRY_MEMORY_LIMIT:-512M}
+          cpus: ${TELEMETRY_CPU_LIMIT:-1.0}
+    depends_on:
+      - docker-socket-proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     healthcheck:
       test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:8000/api/v1/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
-    depends_on:
-      docker-socket-proxy:
-        condition: service_started
 
   # --- Ollama AI Engine ---
   ollama-ai:
@@ -200,22 +219,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ollama
-    image: ${OLLAMA_AI_IMAGE:-botanical-ai-ollama:v0.1.28}
+    image: ${OLLAMA_AI_IMAGE:-botanical-ai-ollama}:${IMAGE_TAG:-latest}
     container_name: ollama_ai
     restart: on-failure
     network_mode: "host"
-    logging: *default-logging
     environment:
+      # We bind to 127.0.0.1 for security, RStudio will reach it locally
       - OLLAMA_HOST=${OLLAMA_HOST_BIND:-127.0.0.1:11434}
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-24h}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
     volumes:
       - ${HOST_OLLAMA_STORAGE:-/var/lib/ollama}:/root/.ollama:rw
     deploy:
       resources:
         limits:
+          # Protect host from unbounded AI inference core starvation
           memory: ${OLLAMA_RAM_LIMIT:-16G}
           cpus: ${OLLAMA_CPU_LIMIT:-2.5}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
     healthcheck:
       test: [ "CMD-SHELL", "curl -f -s http://127.0.0.1:11434/api/version || exit 1" ]
       interval: 1m

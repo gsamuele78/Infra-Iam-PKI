@@ -1,13 +1,14 @@
 #!/bin/bash
-set -euo pipefail
 # 02_configure_time_sync.sh - Unified NTP/chrony setup script
 # FIXED VERSION: Corrects newline handling in pool directive generation
 # Installs, configures, and restarts chrony/ntp/systemd-timesyncd as needed
 # Uses process_template and backup logic from common_utils.sh
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-UTILS_SCRIPT_PATH="${SCRIPT_DIR}/../../infra-rstudio/lib/common_utils.sh"
+set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+UTILS_SCRIPT_PATH="${SCRIPT_DIR}/../lib/common_utils.sh"
+CONF_VARS_FILE="${SCRIPT_DIR}/../config/configure_time_sync.vars.conf"
 TEMPLATE_DIR="${SCRIPT_DIR}/../templates"
 CHRONY_CONF_PATH="/etc/chrony/chrony.conf"
 
@@ -15,31 +16,22 @@ if [[ ! -f "$UTILS_SCRIPT_PATH" ]]; then
     printf "Error: common_utils.sh not found at %s\n" "$UTILS_SCRIPT_PATH" >&2
     exit 1
 fi
+# shellcheck source=../lib/common_utils.sh disable=SC1091
 source "$UTILS_SCRIPT_PATH"
 
-# Docker Deploy: Source .env instead of legacy config
-if [ -f "${SCRIPT_DIR}/../../infra-rstudio/.env" ]; then
-    log "INFO" "Sourcing configuration from .env..."
-    set -a
-    source "${SCRIPT_DIR}/../../infra-rstudio/.env"
-    set +a
+if [[ -f "$CONF_VARS_FILE" ]]; then
+    log "Sourcing NTP/chrony configuration variables from $CONF_VARS_FILE"
+    # shellcheck source=../config/configure_time_sync.vars.conf disable=SC1091
+    source "$CONF_VARS_FILE"
 else
-    log "WARN" ".env file not found at ${SCRIPT_DIR}/../../infra-rstudio/.env"
-fi
-
-# Set defaults if not present in .env
-NTP_PREFERRED_CLIENT="${NTP_PREFERRED_CLIENT:-chrony}"
-CHRONY_CONF_PATH="/etc/chrony/chrony.conf"
-CHRONY_LOG_DIR="/var/log/chrony"
-CHRONY_DRIFTFILE="/var/lib/chrony/chrony.drift"
-CHRONY_MAKESTEP="${CHRONY_MAKESTEP:-1.0 3}"
-CHRONY_RTC_SYNC="${CHRONY_RTC_SYNC:-yes}"
-
-# Handle CHRONY_FALLBACK_POOLS (string in .env, array in script)
-if [[ -n "$CHRONY_FALLBACK_POOLS" ]]; then
-    IFS=' ' read -r -a CHRONY_FALLBACK_POOLS_ARRAY <<< "$CHRONY_FALLBACK_POOLS"
-else
-    CHRONY_FALLBACK_POOLS_ARRAY=("pool 2.debian.pool.ntp.org iburst")
+    log "Warning: NTP/chrony vars file not found; using embedded defaults."
+    NTP_PREFERRED_CLIENT="chrony"
+    CHRONY_CONF_PATH="/etc/chrony/chrony.conf"
+    CHRONY_LOG_DIR="/var/log/chrony"
+    CHRONY_DRIFTFILE="/var/lib/chrony/chrony.drift"
+    CHRONY_MAKESTEP="1.0 3"
+    CHRONY_RTC_SYNC="yes"
+    CHRONY_FALLBACK_POOLS=("pool 2.debian.pool.ntp.org iburst")
 fi
 
 # FIXED: Separate apt-get commands instead of using && operators
@@ -80,8 +72,8 @@ generate_chrony_conf() {
     local fallback_pools_line=""
     
     # FIXED: Use $'\n' to create ACTUAL newlines, not literal "\n" characters
-    if [[ -n "${CHRONY_FALLBACK_POOLS_ARRAY[*]}" ]]; then
-        for pool in "${CHRONY_FALLBACK_POOLS_ARRAY[@]}"; do
+    if [[ -n "${CHRONY_FALLBACK_POOLS[*]}" ]]; then
+        for pool in "${CHRONY_FALLBACK_POOLS[@]}"; do
             # Use $'\n' for real newline character (ANSI-C quoting)
             fallback_pools_line+="$pool"$'\n'
         done
@@ -128,7 +120,7 @@ main_menu() {
     printf "R) Restore configurations from most recent backup\n"
     printf "4) Exit\n"
     read -r -p "Choice: " choice
-    local final_chrony=""
+    read -r -p "Choice: " choice
     case "$choice" in
         1)
             backup_config && install_ntp_client

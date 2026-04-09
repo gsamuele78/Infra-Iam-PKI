@@ -1,41 +1,24 @@
 #!/bin/bash
-set -euo pipefail
+#set -euo pipefail
 # test_rstudio_login.sh
 # Tests RStudio plaintext login using curl with multiple variations
 
 USERNAME="gianfranco.samuele2"
 # Ask for password safely
-read -s -p "Enter Password for $USERNAME: " PASSWORD
+read -r -s -p "Enter Password for $USERNAME: " PASSWORD
 echo ""
 
+COOKIE_JAR="/tmp/rstudio_cookies.txt"
+rm -f "$COOKIE_JAR"
+
+echo "1. Fetching Login Page (for CSRF token)..."
 URL_BASE="http://127.0.0.1:8787"
 
-# --- Configuration ---
-# Generate isolated temp files to prevent symlink attacks or race conditions
-COOKIE_JAR=$(mktemp /tmp/rstudio_cookies.XXXXXX)
-LOGIN_PAGE=$(mktemp /tmp/login_page.XXXXXX)
-COOKIE_JAR_NGINX=$(mktemp /tmp/rstudio_cookies_nginx.XXXXXX)
-LOGIN_PAGE_NGINX=$(mktemp /tmp/login_page_nginx.XXXXXX)
-
-# Cleanup trap to ensure we don't leak temp files
-cleanup() {
-    rm -f "$COOKIE_JAR" "$LOGIN_PAGE" "$COOKIE_JAR_NGINX" "$LOGIN_PAGE_NGINX"
-}
-trap cleanup EXIT
-
-echo "1. Fetching login page to get CSRF token..."
 # Fetch page and headers (Follow redirects with -L to ensure we land on the real page)
-curl -s -L -c "$COOKIE_JAR" "$URL_BASE/auth-sign-in" > "$LOGIN_PAGE"
+curl -s -L -c "$COOKIE_JAR" "$URL_BASE/auth-sign-in" > /tmp/login_page.html
 
-# Extract CSRF token
-CSRF=$(grep "rs-csrf-token" "$LOGIN_PAGE" | sed -n 's/.*value="\([^"]*\)".*/\1/p')
-
-if [ -z "$CSRF" ]; then
-    echo "ERROR: Could not extract CSRF token."
-    head -n 20 "$LOGIN_PAGE"
-    exit 1
-fi
-
+# Extract CSRF
+CSRF=$(grep "rs-csrf-token" /tmp/login_page.html | sed -n 's/.*value="\([^"]*\)".*/\1/p')
 echo "CSRF Token: $CSRF"
 
 echo "--- Cookie Jar Content (Original) ---"
@@ -99,8 +82,8 @@ echo "$response" | grep -E "HTTP/|Location"
 sleep 5
 echo ""
 echo "=========================================="
-echo "TEST 3: Plaintext Package in 'v' (v=user\npwd)"
-echo "Payload: v=username\npassword, persist=1..."
+printf "TEST 3: Plaintext Package in 'v' (v=user\\npwd)\n"
+printf "Payload: v=username\\npassword, persist=1...\n"
 echo "=========================================="
 PAYLOAD="$(printf '%s\n%s' "$USERNAME" "$PASSWORD")"
 response=$(curl -s -i -b "$COOKIE_JAR" -c "$COOKIE_JAR" \

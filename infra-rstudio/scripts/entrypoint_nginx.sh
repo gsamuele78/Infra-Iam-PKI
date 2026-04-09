@@ -2,7 +2,7 @@
 # entrypoint_nginx.sh
 # Custom Nginx Entrypoint using project's common_utils.sh for template processing
 
-set -euo pipefail
+set -e
 
 # Define paths
 SCRIPT_DIR="/scripts"
