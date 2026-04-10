@@ -222,3 +222,61 @@ All scripts in `scripts/infra-rstudio/` log to stdout with `[INFO]`, `[WARN]`, `
 ```bash
 scripts/infra-rstudio/deploy_rstudio.sh 2>&1 | tee /var/log/rstudio-deploy-$(date +%Y%m%d).log
 ```
+
+---
+
+## Operational Maintenance
+
+### TLS Certificate Rotation
+
+If the portal SSL certificates expire, Nginx and TTYD will stop functioning. The ACME/Step-CA enrollment system runs automatic checks at boot.
+
+**Forced certificate rotation** (after compromise or CA re-initialization):
+
+1. Revoke the old certificate on the PKI host (root-CA side)
+2. Generate a new access token: `scripts/infra-pki/generate_token.sh`
+3. Insert the new token in `.env` (`STEP_TOKEN="..."`)
+4. Restart Nginx to trigger the entrypoint ACME script:
+
+```bash
+docker compose restart nginx-portal
+```
+
+### tmpfs Lifecycle Management
+
+To prevent RAM saturation, container temporary files (`/tmp`) are mapped at runtime using `tmpfs`. This absorbs DataFrame snapshot I/O without hitting disk. Restarting the RStudio container surgically clears the temporary storage:
+
+```bash
+docker compose restart rstudio-sssd
+```
+
+> **Note**: tmpfs contents are volatile — they are destroyed on container stop/restart. This is by design for security (cache forensic destruction) and performance (zero disk I/O bottleneck).
+
+### OOM / Orphan R Session Cleanup
+
+The host-side script `cleanup_r_orphans.sh` (if configured via crontab) automatically detects `rsession` processes that consume CPU without an active owner. The host terminates them via `SIGTERM`, protecting the `tmpfs` RAM allocation for the RStudio container.
+
+Manual cleanup:
+
+```bash
+# List R sessions inside the container
+docker exec rstudio_pet ps aux | grep rsession
+
+# Kill a specific orphan (from host, since network_mode: host)
+kill -TERM <PID>
+```
+
+### Version Updates (Build & Pinning)
+
+Due to the strict version-pinning policy on R/Python dependencies:
+
+```bash
+# Rebuild with cache (fast — uses c2d4u binary packages)
+docker compose --profile sssd build
+
+# Full rebuild (no cache — when pinned versions change)
+docker compose --profile sssd build --no-cache
+```
+
+> The `c2d4u` PPA and `bspm` binary packages reduce build time from ~1 hour (source compilation) to minutes.
+

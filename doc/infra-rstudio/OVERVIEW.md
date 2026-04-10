@@ -108,3 +108,60 @@ Bootstrap sequence:
 | **Active Directory** | User auth via SSSD or Winbind (required for domain users) | LDAPS / Kerberos |
 | **NFS / NAS** | User home directories (bind mount on host, transparent) | NFS on host |
 | **Open OnDemand (OOD)** | Future: OOD→RStudio proxy integration | HTTPS |
+
+---
+
+## OIDC Backend Injection Architecture
+
+When the `oidc` profile is active, authentication flows through `oauth2-proxy` as a sidecar. The key design challenge is that **RStudio Open Source does not natively accept `X-Forwarded-User` headers** (this is a commercial Posit Workbench feature). The solution uses Nginx backend proxy injection to transparently exchange an OIDC token for a valid RStudio session — zero interaction required from the user.
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant OOD_Gateway as OOD Gateway
+    participant Keycloak
+    participant Nginx as Nginx (Docker)
+    participant OAuth2 as oauth2-proxy
+    participant RStudio as RStudio Backend
+
+    User->>OOD_Gateway: Access RStudio
+    OOD_Gateway->>Keycloak: Redirect for OIDC Login
+    Keycloak->>OOD_Gateway: JWT Token (Auth Success)
+    OOD_Gateway->>Nginx: Request with OIDC Token
+    Nginx->>OAuth2: subrequest /oauth2/auth
+    OAuth2-->>Nginx: 200 OK (X-Auth-Request-User)
+    Nginx->>RStudio: POST /auth-do-sign-in (Backend Injection)
+    RStudio-->>Nginx: Set-Cookie: rstudio-session
+    Nginx-->>User: RStudio UI loaded (Transparent Login)
+```
+
+### Enabling OIDC Mode
+
+1. Create `config/oauth2-proxy.cfg` with Keycloak client secrets
+2. Set the required `.env` variables (see [CONFIGURATION.md](CONFIGURATION.md))
+3. Deploy with the `oidc` profile:
+
+```bash
+docker compose --profile sssd --profile portal --profile oidc up -d
+```
+
+### Nginx Blueprint Switching
+
+The Nginx templates (`templates/nginx_proxy_location.conf.template`) include both authentication modes as blueprint sections:
+
+- **Active by default**: `--- AD PAM AUTHENTICATION ---` blocks
+- **To enable OIDC**: Comment out PAM blocks and uncomment `--- OIDC / OAUTH2-PROXY BLUEPRINT ---` blocks (replacing `auth_pam` with `auth_request /oauth2/auth;`)
+
+The final injection step (Backend Proxy Injection to RStudio) requires a `proxy_set_header` block tuned to the specific PAM architecture inside the RStudio container filesystem.
+
+---
+
+## Related Documentation
+
+- [SECURITY.md](SECURITY.md) — Defense-in-depth security model, container boundaries, Nginx hardening
+- [CONFIGURATION.md](CONFIGURATION.md) — Complete `.env` variable reference and compose profile system
+- [DEPLOY.md](DEPLOY.md) — Step-by-step deployment guide with prerequisites
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — Diagnostic commands and common failure patterns
+

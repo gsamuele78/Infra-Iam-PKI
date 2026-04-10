@@ -159,3 +159,31 @@ scripts/infra-rstudio/reset_rstudio.sh
 ```
 
 > ⚠️ This stops and removes all containers and volumes. Use only for full redeployment.
+
+---
+
+## Container Architecture Reference
+
+### Dockerfile Topology
+
+| Dockerfile | Base Image | Role | Key Features |
+| :--- | :--- | :--- | :--- |
+| `Dockerfile.sssd` / `Dockerfile.samba` | `rocker/geospatial` (Ubuntu LTS) | Primary compute container | AD integration (SSSD/Winbind), PPA `c2d4u` for binary R packages via `bspm` |
+| `Dockerfile.nginx` | `nginx:alpine` | Reverse proxy + UI portal | Custom templates, `gettext` for runtime interpolation, security headers |
+| `Dockerfile.telemetry` | `python:3.11-slim` | Async metrics API | Version-pinned FastAPI/Pydantic, runs as non-root |
+
+### Entrypoint Boot Phases
+
+**`entrypoint_rstudio.sh`** executes 4 phases before starting RStudio:
+
+1. **PKI Trust Ingestion** — Checks `$CA_URL`. If set, imports Root CA into the OS trust store via `manage_pki_trust.sh`
+2. **Resource Constraint Injection** — Reads compose `deploy.resources` limits (CPU cores, RAM) and converts them to `Renviron.site` values for OpenBLAS/OMP thread calibration
+3. **Template Sandboxing** — Uses `mktemp` to generate `Rprofile.site` and `rserver.conf` from `.env` variables, preventing I/O race conditions
+4. **Auth Binding** — Modifies `/etc/nsswitch.conf` to trust host-side LDAP pipes (SSSD or Winbind)
+
+**`entrypoint_nginx.sh`** executes 3 phases:
+
+1. **Certificate Check** — Verifies existing certs or enrolls new ones via `pki/enroll_cert.sh` if Step-CA integration is configured
+2. **Portal Generation** — Uses `process_template()` to render the Botanical Portal HTML from feature flags in `.env`
+3. **Hardened Config** — Replaces default `nginx.conf` with DDoS-mitigated tuning (limited buffers, coordinated timeouts)
+
