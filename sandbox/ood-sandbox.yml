@@ -2,6 +2,9 @@
 # Production-equivalent OOD fixture for ood-host (192.168.56.30)
 # Builds from Dockerfile.ood using official Ubuntu Noble 24.04 deb packages.
 # Open OnDemand is the only service on this host.
+#
+# HC-02: All volumes are bind mounts (no named volumes)
+# HC-09: No privileged mode — uses cap_drop/cap_add like production
 ---
 services:
   ood-init:
@@ -17,9 +20,14 @@ services:
       - CA_URL=${CA_URL}
       - FINGERPRINT=${FINGERPRINT}
     volumes:
-      - ood_certs:/app/certs
+      - ./sandbox-data/ood/certs:/app/certs
       - ../scripts:/scripts:ro
     entrypoint: /scripts/infra-iam/fetch_pki_root.sh /app/certs/root_ca.crt
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
 
   ood-portal:
     # Builds official OOD from Ubuntu Noble 24.04 apt packages (apt.osc.edu)
@@ -29,7 +37,7 @@ services:
     image: infra-ood:sandbox
     container_name: ood-portal
     user: root
-    privileged: true
+    # privileged: true  # REMOVED: contradicts cap_drop, use specific caps (HC-09)
     restart: unless-stopped
     networks: [ ood-net ]
     ports:
@@ -45,7 +53,7 @@ services:
       - ../infra-ood/config/ood_portal.yml:/etc/ood/config/ood_portal.yml:ro
       - ../infra-ood/public/bigea-theme.css:/var/www/ood/public/bigea-theme.css:ro
       - ../infra-ood/public/img:/var/www/ood/public/img:ro
-      - ood_certs:/certs:ro
+      - ./sandbox-data/ood/certs:/certs:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     cap_drop: [ ALL ]
     cap_add:
@@ -70,5 +78,4 @@ networks:
   ood-net:
     name: ood-net
 
-volumes:
-  ood_certs:
+# HC-02: No named volumes — all bind mounts under ./sandbox-data/ood/
