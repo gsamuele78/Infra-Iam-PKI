@@ -12,7 +12,7 @@
 
 Claude excels at step-by-step reasoning. For this project, ALWAYS use chain-of-thought before producing any code:
 
-1. **Identify the subsystem** (PKI / IAM / OOD / Scripts / Sandbox / K8s).
+1. **Identify the subsystem** (PKI / IAM / OOD / RStudio / Scripts / Sandbox / K8s).
 2. **List the invariants** from `agents.md` Section 4 that apply.
 3. **Check the anti-patterns** from Section 5 — actively scan your output for violations.
 4. **Verify the boot sequence** — understand which containers depend on which.
@@ -70,6 +70,13 @@ Use this XML-structured context when working with Claude API or Claude Projects:
       <ports>80 (Apache → PUN → RStudio containers)</ports>
       <integrations>Keycloak OIDC, Internal PKI for trust</integrations>
     </component>
+    <component name="infra-rstudio" role="RStudio Compute">
+      <tech>RStudio Server + oauth2-proxy v7.6.0 + Nginx portal + SSSD/Samba AD auth</tech>
+      <network>network_mode: host (EXCEPTION — SSSD unix socket passthrough)</network>
+      <ports>80/443 (Nginx portal), 8787 (RStudio), 4180 (oauth2-proxy)</ports>
+      <integrations>Keycloak OIDC via oauth2-proxy, PKI trust via manage_pki_trust.sh (fingerprint-verified)</integrations>
+      <note>This is the ONLY stack allowed to use network_mode: host</note>
+    </component>
   </components>
   
   <hard_constraints>
@@ -96,6 +103,7 @@ Use this XML-structured context when working with Claude API or Claude Projects:
     <image name="watchtower" version="1.7.1" registry="containrrr" />
     <image name="docker-socket-proxy" version="edge" registry="tecnativa" />
     <image name="ondemand" version="4.1.0" source="apt.osc.edu (deb, not Docker Hub)" />
+    <image name="oauth2-proxy" version="v7.6.0" registry="quay.io/oauth2-proxy" />
   </image_versions>
   
   <known_bugs>

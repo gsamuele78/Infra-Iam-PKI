@@ -28,8 +28,9 @@ A production-grade **Infrastructure-as-Code (IaC)** system providing:
 - **Infra-PKI:** Internal Certificate Authority (Smallstep `step-ca` 0.29.0) backed by PostgreSQL 15, fronted by Caddy L4 proxy with IP allowlisting.
 - **Infra-IAM:** Single Sign-On (Keycloak 26.0.7) with Active Directory LDAPS federation, secured by internal PKI certificates.
 - **Infra-OOD:** Open OnDemand portal (Ubuntu Noble 24.04 deb packages from `apt.osc.edu`) for HPC interactive sessions (RStudio, etc.), authenticated via OIDC against Keycloak.
+- **Infra-RStudio:** Containerized RStudio Server with zero-trust `oauth2-proxy` sidecars, Nginx portal, and SSSD/Samba auth backends for AD domain integration. Uses `network_mode: host` for unix domain socket passthrough.
 - **Automation Scripts:** Shell toolkit for host enrollment, certificate lifecycle, trust management, backup/restore.
-- **Sandbox:** Multi-VM Vagrant/libvirt environment (`pki-host`, `iam-host`, `ood-host`) that mirrors production topology 1:1.
+- **Sandbox:** Multi-VM Vagrant/libvirt environment (`pki-host`, `iam-host`, `ood-host`, `rstudio-host`) that mirrors production topology 1:1.
 - **Kubernetes Manifests:** RKE2-targeted deployment (StatefulSets, NetworkPolicies, RBAC CronJobs) as a future migration path.
 
 ### 1.2 Who This Is For
@@ -50,25 +51,25 @@ The BIOME research group (Biodiversity & MacroEcology) at the Department of Biol
 ### 2.1 Production Topology (Multi-Host)
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│    PKI Host      │    │    IAM Host      │    │    OOD Host      │
-│  192.168.56.10   │    │  192.168.56.20   │    │  192.168.56.30   │
-│                  │    │                  │    │                  │
-│ ┌──────────────┐ │    │ ┌──────────────┐ │    │ ┌──────────────┐ │
-│ │ Caddy L4     │◄├────┤►│ Caddy L7     │◄├────┤►│ Apache+OIDC  │ │
-│ │ :9000 + :80  │ │    │ │ :80/:443     │ │    │ │ :80          │ │
-│ └──────┬───────┘ │    │ └──────┬───────┘ │    │ └──────┬───────┘ │
-│        │         │    │        │         │    │        │         │
-│ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   Per-User NGINX │
-│ │ step-ca      │ │    │ │ Keycloak     │ │    │   (PUN spawning) │
-│ │ 0.29.0       │ │    │ │ 26.0.7       │ │    │                  │
-│ └──────┬───────┘ │    │ └──────┬───────┘ │    │   ┌──────────┐   │
-│        │         │    │        │         │    │   │ RStudio   │   │
-│ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   │ Containers│   │
-│ │ PostgreSQL   │ │    │ │ PostgreSQL   │ │    │   └──────────┘   │
-│ │ 15-alpine    │ │    │ │ 15-alpine    │ │    │                  │
-│ └──────────────┘ │    │ └──────────────┘ │    │                  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│    PKI Host      │    │    IAM Host      │    │    OOD Host      │    │  RStudio Host    │
+│  192.168.56.10   │    │  192.168.56.20   │    │  192.168.56.30   │    │  192.168.56.40   │
+│                  │    │                  │    │                  │    │  (network: host) │
+│ ┌──────────────┐ │    │ ┌──────────────┐ │    │ ┌──────────────┐ │    │ ┌──────────────┐ │
+│ │ Caddy L4     │◄├────┤►│ Caddy L7     │◄├────┤►│ Apache+OIDC  │ │    │ │ Nginx Portal │ │
+│ │ :9000 + :80  │ │    │ │ :80/:443     │ │    │ │ :80          │ │    │ │ :80/:443     │ │
+│ └──────┬───────┘ │    │ └──────┬───────┘ │    │ └──────┬───────┘ │    │ └──────┬───────┘ │
+│        │         │    │        │         │    │        │         │    │        │         │
+│ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   Per-User NGINX │    │ ┌──────▼───────┐ │
+│ │ step-ca      │ │    │ │ Keycloak     │ │    │   (PUN spawning) │    │ │ oauth2-proxy │ │
+│ │ 0.29.0       │ │    │ │ 26.0.7       │ │    │                  │    │ │ → RStudio    │ │
+│ └──────┬───────┘ │    │ └──────┬───────┘ │    │   ┌──────────┐   │    │ └──────┬───────┘ │
+│        │         │    │        │         │    │   │ RStudio   │   │    │ ┌──────▼───────┐ │
+│ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   │ Containers│   │    │ │ SSSD/Samba   │ │
+│ │ PostgreSQL   │ │    │ │ PostgreSQL   │ │    │   └──────────┘   │    │ │ Auth Sidecar │ │
+│ │ 15-alpine    │ │    │ │ 15-alpine    │ │    │                  │    │ └──────────────┘ │
+│ └──────────────┘ │    │ └──────────────┘ │    │                  │    │                  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 ### 2.2 Trust Chain
@@ -78,6 +79,7 @@ step-ca Root CA
     ├──► Caddy (IAM) — ACME auto-cert for DOMAIN_SSO
     ├──► Keycloak — TLS cert via iam-renewer sidecar
     ├──► OOD Apache — Root CA in system trust store
+    ├──► RStudio Host — Root CA via manage_pki_trust.sh (fingerprint-verified)
     └──► Remote hosts — SSH host certs via join_pki.sh
 ```
 
@@ -101,10 +103,17 @@ step-ca Root CA
 | IAM | `iam-watchtower` | watchtower:1.7.1 | Auto-update | root | No |
 | OOD | `ood-init` | Dockerfile.init | Fetch PKI root | root | Yes |
 | OOD | `ood-portal` | Dockerfile.ood (Noble) | OnDemand portal | root | No |
+| RStudio | `rstudio_pet` | Dockerfile (RStudio Server) | Compute + IDE | configurable | No |
+| RStudio | `nginx_portal` | Dockerfile.nginx | Reverse proxy + static | root | No |
+| RStudio | `oauth2_proxy` | oauth2-proxy:v7.6.0 | OIDC auth gate | non-root | No |
+| RStudio | `auth_sidecar` | Dockerfile.sssd or .samba | AD domain join | root | No |
+| RStudio | `ollama_ai` | Ollama (custom) | AI model server | non-root | No |
+| RStudio | `telemetry_api` | Dockerfile.telemetry | Usage metrics | non-root | No |
 
 ### 2.4 Network Isolation
 
 - Each stack has its own Docker bridge network (`pki-net`, `iam-net`, `ood-net`).
+- **Exception:** `infra-rstudio` uses `network_mode: host` for SSSD/Winbind unix domain socket passthrough. This is a documented, non-negotiable exception (see `doc/infra-rstudio/OVERVIEW.md`). No other stack may use `network_mode: host`.
 - Cross-host communication happens over the physical/private network, NOT shared Docker networks.
 - PostgreSQL ports are NEVER exposed to the host.
 
@@ -479,6 +488,7 @@ The sandbox is NOT a simplified test harness — it is a **1:1 production-topolo
 | `pki-host` | 192.168.56.10 | 2048 MB | 2 | infra-pki | `infra-pki/docker-compose.yml` (production compose directly) |
 | `iam-host` | 192.168.56.20 | 2048 MB | 2 | infra-iam | `sandbox/iam-sandbox.yml` (sandbox override) |
 | `ood-host` | 192.168.56.30 | 4096 MB | 4 | infra-ood | `sandbox/ood-sandbox.yml` (sandbox override) |
+| `rstudio-host` | 192.168.56.40 | 4096 MB | 4 | infra-rstudio | `sandbox/rstudio-sandbox.yml` (sandbox override) |
 
 ### 8.2 Vagrantfile Provisioner Logic
 

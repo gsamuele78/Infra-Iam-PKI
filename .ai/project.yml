@@ -139,6 +139,12 @@ script_categories:
       - "scripts/infra-iam/fetch_pki_root.sh"
       - "scripts/infra-iam/fetch_ad_cert.sh"
       - "scripts/infra-iam/renew_certificate.sh"
+      - "infra-rstudio/scripts/entrypoint_rstudio.sh"
+      - "infra-rstudio/scripts/entrypoint_nginx.sh"
+      - "infra-rstudio/scripts/entrypoint_auth_pet.sh"
+      - "infra-rstudio/scripts/manage_pki_trust.sh"
+      - "infra-rstudio/scripts/docker-entrypoint.sh"
+      - "infra-rstudio/scripts/maintenance_entrypoint.sh"
 
   operator_interactive:
     description: "Run by sysadmin on host. May use interactive input."
@@ -153,12 +159,11 @@ script_categories:
       - "scripts/infra-iam/configure_iam.sh"
       - "scripts/infra-ood/deploy_ood.sh"
       - "scripts/infra-ood/reset_ood.sh"
-      - "infra-rstudio/deploy.sh"
-      - "scripts/infra-rstudio/02_configure_time_sync.sh"
-      - "scripts/infra-rstudio/03_install_secure_access.sh"
-      - "scripts/infra-rstudio/10_join_domain_sssd.sh"
-      - "scripts/infra-rstudio/11_join_domain_samba.sh"
-      - "scripts/infra-rstudio/12_lib_kerberos_setup.sh"
+      - "scripts/infra-rstudio/deploy_rstudio.sh"
+      - "scripts/infra-rstudio/reset_rstudio.sh"
+      - "scripts/infra-rstudio/validate_rstudio.sh"
+      - "scripts/infra-rstudio/configure_rstudio_pki.sh"
+      - "scripts/infra-rstudio/backup_rstudio.sh"
       - "scripts/common/maintenance_docker.sh"
 
   client_portable:
@@ -216,6 +221,16 @@ known_issues:
     severity: "P3"
     component: "sandbox"
     issue: "full_sandbox_launcher.sh has dangling EOF and references non-existent docker-compose.sandbox.yml."
+
+  - id: "TD-10"
+    severity: "P3"
+    component: "infra-rstudio"
+    issue: "Uses network_mode: host (exception to isolated network rule) for SSSD/Winbind unix domain socket passthrough. Documented in doc/infra-rstudio/OVERVIEW.md."
+
+  - id: "TD-11"
+    severity: "P3"
+    component: "root"
+    issue: "P0-FIXES.sh and ALL-FIXES.sh moved to scripts/legacy/ — stale one-shot audit scripts. Do not re-run."
 
 # ──────────────────────────────────────────────────────────────
 # BRANDING

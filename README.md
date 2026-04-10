@@ -1,7 +1,7 @@
 # Infra-IAM-PKI: Certified Infrastructure & Identity
 
-**Version:** 3.0.0
-**Maintainer:** DevOps Team / System Engineering
+**Version:** 3.1.0
+**Maintainer:** JFS — IT Officer (Funzionario Tecnico Informatico), BiGeA, Università di Bologna
 
 ## 1. Project Overview
 
@@ -94,7 +94,7 @@ Notable constraints actively enforced:
 - **Infra-PKI**: [Overview](doc/infra-pki/OVERVIEW.md) | [Deploy](doc/infra-pki/DEPLOY.md)
 - **Infra-IAM**: [Overview](doc/infra-iam/OVERVIEW.md) | [Deploy](doc/infra-iam/DEPLOY.md)
 - **Infra-OOD**: [Overview](doc/infra-ood/OVERVIEW.md)
-- **Infra-RStudio**: [Prerequisites & Host Prep](infra-rstudio/doc/PREREQUISITES.md)
+- **Infra-RStudio**: [Overview](doc/infra-rstudio/OVERVIEW.md) | [Deploy](doc/infra-rstudio/DEPLOY.md) | [Configuration](doc/infra-rstudio/CONFIGURATION.md) | [Troubleshooting](doc/infra-rstudio/TROUBLESHOOTING.md)
 - **Architecture**:
   - [Sandbox Testing Guide](doc/SANDBOX_TESTING.md)
   - [AI Agent Management Constraints](doc/AI_AGENT_MANAGEMENT.md)

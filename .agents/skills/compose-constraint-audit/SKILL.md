@@ -37,6 +37,10 @@ For EACH service in the compose file, verify:
 
 10. **Labels:** Long-running services should have `com.centurylinklabs.watchtower.enable=true`.
 
+11. **Network Mode Exception:** `infra-rstudio` uses `network_mode: host` for SSSD/Winbind unix domain socket passthrough. This is a documented non-negotiable exception (see `doc/infra-rstudio/OVERVIEW.md`). **No other stack may use `network_mode: host`.**
+
+12. **Compose Profiles:** `infra-rstudio` uses `profiles: [sssd]` and `profiles: [samba]` for auth backend selection via `AUTH_BACKEND` env var. When auditing, verify both profile paths have resource limits.
+
 ## Output Format
 
 For each finding:
