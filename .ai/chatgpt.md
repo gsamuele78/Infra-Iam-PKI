@@ -28,10 +28,11 @@ ChatGPT supports several context injection methods. Choose the one that fits you
 - `infra-pki` → step-ca 0.29.0 + PostgreSQL 15 + Caddy L4 proxy (TCP, port 9000)
 - `infra-iam` → Keycloak 26.0.7 + PostgreSQL 15 + Caddy L7 reverse proxy (HTTPS)
 - `infra-ood` → Open OnDemand 4.1 (Ubuntu 24.04 debs from apt.osc.edu) + Apache mod_auth_openidc
+- `infra-rstudio` → RStudio Server + oauth2-proxy v7.6.0 + Nginx portal + SSSD/Samba AD auth (uses `network_mode: host` — only stack allowed to)
 
 **Engineering paradigm:** Pessimistic System Engineering — assume failure, bound all resources, verify all trust chains, fail fast on misconfiguration.
 
-**Sandbox:** Multi-VM Vagrant/libvirt (pki-host=192.168.56.10, iam-host=.20, ood-host=.30) that mirrors production 1:1.
+**Sandbox:** Multi-VM Vagrant/libvirt (pki-host=192.168.56.10, iam-host=.20, ood-host=.30, rstudio-host=.40) that mirrors production 1:1.
 
 ---
 
@@ -66,6 +67,7 @@ PINNED VERSIONS (do not change):
 - step-ca: 0.29.0 | step-cli: 0.29.0 | postgres: 15-alpine
 - keycloak: 26.0.7 (quay.io) | caddy: 2.9.1-alpine
 - watchtower: 1.7.1 (containrrr) | docker-socket-proxy: edge (tecnativa)
+- oauth2-proxy: v7.6.0 (quay.io/oauth2-proxy)
 - OOD: built from Dockerfile.ood using Ubuntu Noble 24.04 debs (apt.osc.edu)
 
 WHEN GENERATING CODE:

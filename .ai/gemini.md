@@ -44,8 +44,9 @@ Gemini performs best with structured, clear outputs. For this project:
 - `infra-pki` → step-ca 0.29.0 + PostgreSQL 15 + Caddy L4 (TCP proxy)
 - `infra-iam` → Keycloak 26.0.7 + PostgreSQL 15 + Caddy L7 (HTTPS reverse proxy)  
 - `infra-ood` → Open OnDemand 4.1 (Ubuntu 24.04 debs) + Apache mod_auth_openidc
+- `infra-rstudio` → RStudio Server + oauth2-proxy v7.6.0 + Nginx portal + SSSD/Samba AD auth (`network_mode: host` — only stack allowed to)
 
-**Topology:** Three isolated Docker hosts communicating over private network. NOT a single-host Docker Compose stack.
+**Topology:** Four isolated Docker hosts communicating over private network. NOT a single-host Docker Compose stack.
 
 **Engineering Philosophy:** Pessimistic — assume every component will fail; bound all resources; verify all trust chains; fail fast on misconfigurations.
 
@@ -88,6 +89,7 @@ Before generating ANY code for this project, Gemini MUST verify against this che
 | `watchtower` | `1.7.1` | `containrrr/watchtower` | NOT `nickfedor/watchtower` (that was a bug) |
 | `docker-socket-proxy` | `edge` | `tecnativa/docker-socket-proxy` | Minimal API surface |
 | Open OnDemand | `4.1.0` | `apt.osc.edu` (deb packages) | Built from `Dockerfile.ood` — NO Docker Hub image exists |
+| `oauth2-proxy` | `v7.6.0` | `quay.io/oauth2-proxy/oauth2-proxy` | RStudio OIDC auth gate |
 
 ---
 

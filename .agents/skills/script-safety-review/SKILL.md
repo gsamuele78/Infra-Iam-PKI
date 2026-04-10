@@ -30,11 +30,22 @@ Check which category this script belongs to:
 - `scripts/infra-iam/fetch_pki_root.sh`
 - `scripts/infra-iam/fetch_ad_cert.sh`
 - `scripts/infra-iam/renew_certificate.sh`
+- `infra-rstudio/scripts/entrypoint_rstudio.sh`
+- `infra-rstudio/scripts/entrypoint_nginx.sh`
+- `infra-rstudio/scripts/entrypoint_auth_pet.sh`
+- `infra-rstudio/scripts/manage_pki_trust.sh`
+- `infra-rstudio/scripts/docker-entrypoint.sh`
+- `infra-rstudio/scripts/maintenance_entrypoint.sh`
 
 If the script is in this list and contains `read -p`, `read -rp`, or `read -s`, it WILL hang when run inside a Docker container. This is a **critical failure**.
 
 **Operator scripts (interactive allowed):**
-All other scripts in `scripts/` that are run by the sysadmin.
+All other scripts in `scripts/` that are run by the sysadmin, including:
+- `scripts/infra-rstudio/deploy_rstudio.sh`
+- `scripts/infra-rstudio/reset_rstudio.sh`
+- `scripts/infra-rstudio/validate_rstudio.sh`
+- `scripts/infra-rstudio/configure_rstudio_pki.sh`
+- `scripts/infra-rstudio/backup_rstudio.sh`
 
 ### 4. Config Reading
 - CORRECT: `grep "^VAR=" .env | cut -d= -f2- | tr -d '"'`
