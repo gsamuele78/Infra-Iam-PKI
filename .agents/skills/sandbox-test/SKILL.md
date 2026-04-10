@@ -1,6 +1,6 @@
 ---
 name: sandbox-test
-description: Guides testing changes in the Vagrant/libvirt sandbox environment. Use when validating fixes, testing new features, or debugging container issues. Knows the three-VM topology and sandbox-specific compose overrides.
+description: Guides testing changes in the Vagrant/libvirt sandbox environment. Use when validating fixes, testing new features, or debugging container issues. Knows the four-VM topology and sandbox-specific compose overrides.
 ---
 
 # Sandbox Testing Skill
@@ -14,6 +14,7 @@ You are helping test a change in the Infra-IAM-PKI Vagrant sandbox.
 | pki-host | 192.168.56.10 | step-ca + Postgres + Caddy L4 | `infra-pki/docker-compose.yml` (PRODUCTION — no override) |
 | iam-host | 192.168.56.20 | Keycloak + Postgres + Caddy | `sandbox/iam-sandbox.yml` (sandbox override) |
 | ood-host | 192.168.56.30 | Open OnDemand + Apache | `sandbox/ood-sandbox.yml` (sandbox override) |
+| rstudio-host | 192.168.56.40 | RStudio Server + Nginx + auth sidecars | `sandbox/rstudio-sandbox.yml` (sandbox override) |
 
 ## CRITICAL: PKI Uses Production Compose
 
@@ -40,6 +41,7 @@ curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint
 ```bash
 vagrant up iam-host          # Fetches fingerprint from pki-host automatically
 vagrant up ood-host          # Same fingerprint fetch
+vagrant up rstudio-host      # Same fingerprint fetch
 ```
 
 ### Step 4: Verify IAM
@@ -49,7 +51,14 @@ vagrant ssh iam-host -c "docker compose -f /workspace/Infra-Iam-PKI/sandbox/iam-
 curl -sf http://192.168.56.20/health
 ```
 
-### Step 5: Push Code Changes
+### Step 5: Verify RStudio
+```bash
+vagrant ssh rstudio-host -c "docker compose -f /workspace/Infra-Iam-PKI/sandbox/rstudio-sandbox.yml ps"
+# Health check container: rstudio_pet (NOT nginx_portal — that was the old name, fixed in Phase 1)
+curl -sf http://192.168.56.40/health
+```
+
+### Step 6: Push Code Changes
 After modifying files locally:
 ```bash
 vagrant rsync                # Push changes to all VMs

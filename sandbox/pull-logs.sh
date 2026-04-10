@@ -15,6 +15,6 @@ fi
 
 echo "Pulling logs from $HOST..."
 vagrant ssh-config "$HOST" > "$SCRIPT_DIR/ssh_config.tmp"
-rsync -avz -e "ssh -F $SCRIPT_DIR/ssh_config.tmp" "$HOST:/workspace/R-studioConf/sandbox/logs/$HOST/" "$DST_DIR/"
+rsync -avz -e "ssh -F $SCRIPT_DIR/ssh_config.tmp" "$HOST:/workspace/Infra-Iam-PKI/sandbox/logs/$HOST/" "$DST_DIR/"
 rm -f "$SCRIPT_DIR/ssh_config.tmp"
 echo "Done."

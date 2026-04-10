@@ -447,8 +447,8 @@ Vagrant.configure("2") do |config|
 
       echo "Waiting for RStudio portal to become healthy (max 120s)..."
       for i in $(seq 1 24); do
-        STATUS=$(docker inspect --format='{{.State.Health.Status}}' nginx_portal 2>/dev/null || echo "starting")
-        echo "  Attempt $i/24 — nginx_portal health: $STATUS"
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' rstudio_pet 2>/dev/null || echo "starting")
+        echo "  Attempt $i/24 — rstudio_pet health: $STATUS"
         if [ "$STATUS" = "healthy" ]; then break; fi
         sleep 5
       done
