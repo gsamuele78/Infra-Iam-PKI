@@ -235,6 +235,14 @@ services:
         max-file: "5"
         max-size: "15m"
 
+# Pinned subnet: Docker assigns custom-network subnets sequentially (172.18, 172.19, ...)
+# so a `docker compose down` / reset could silently move pki-net to a new CIDR and
+# break the Caddy L4 remote_ip allowlist (ALLOWED_IPS). Pinning makes the bridge
+# deterministic: ALLOWED_IPS must always contain 172.28.100.0/24.
 networks:
   pki-net:
     name: pki-net
+    ipam:
+      config:
+        - subnet: 172.28.100.0/24
+          gateway: 172.28.100.1

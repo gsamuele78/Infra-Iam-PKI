@@ -74,43 +74,30 @@ else
     echo -e "${YELLOW}⚠ validate_config.sh not found, skipping validation${NC}"
 fi
 
-# Step 2: Fix Caddyfile if needed
+# Step 2: Validate Caddyfile (fail-fast — the Caddyfile is NEVER auto-rewritten:
+# a previous auto-fix silently dropped the :80 certs/fingerprint site block,
+# which breaks IAM/OOD cross-host bootstrap)
 echo ""
 echo -e "${BLUE}[Step 2/7] Checking Caddyfile...${NC}"
+
+# The compose file tags the local build as infra-pki-caddy:local.
+# Build it first if missing (fresh host) so validation can run.
+if ! docker image inspect infra-pki-caddy:local >/dev/null 2>&1; then
+    echo "  Building Caddy image for validation..."
+    (cd "$PKI_DIR" && docker compose build caddy)
+fi
+
 if ! docker run --rm \
     -v "$PKI_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile" \
     -e ALLOWED_IPS="127.0.0.1/32" \
-    infra-pki-caddy:latest \
+    infra-pki-caddy:local \
     caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid"; then
-    
-    echo -e "${YELLOW}⚠ Caddyfile has errors. Applying fix...${NC}"
-    
-    # Backup current Caddyfile
-    cp "$PKI_DIR/caddy/Caddyfile" "$PKI_DIR/caddy/Caddyfile.backup.$(date +%Y%m%d_%H%M%S)"
-    
-    # Apply fixed Caddyfile
-    cat > "$PKI_DIR/caddy/Caddyfile" <<'EOF'
-{
-	layer4 {
-		:9000 {
-			@allowed remote_ip {$ALLOWED_IPS}
-			route @allowed {
-				proxy step-ca:9000
-			}
-		}
-	}
-	log {
-		output file /var/log/caddy/access.log {
-			roll_size 10mb
-			roll_keep 5
-			roll_keep_for 720h
-		}
-		format json
-		level INFO
-	}
-}
-EOF
-    echo -e "${GREEN}✓ Caddyfile fixed${NC}"
+
+    echo -e "${RED}✗ Caddyfile validation failed. Aborting deployment.${NC}"
+    echo -e "${YELLOW}  Inspect the errors with:${NC}"
+    echo -e "${YELLOW}    docker run --rm -v \"$PKI_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile\" -e ALLOWED_IPS=\"127.0.0.1/32\" infra-pki-caddy:local caddy validate --config /etc/caddy/Caddyfile${NC}"
+    echo -e "${YELLOW}  Reference config: infra-pki/caddy/Caddyfile in git (restore with 'git checkout -- infra-pki/caddy/Caddyfile').${NC}"
+    exit 1
 else
     echo -e "${GREEN}✓ Caddyfile is valid${NC}"
 fi
@@ -121,20 +108,36 @@ echo -e "${BLUE}[Step 3/7] Creating directory structure...${NC}"
 mkdir -p "$PKI_DIR"/{step_data,db_data,logs/{step-ca,postgres,caddy,watchtower}}
 echo -e "${GREEN}✓ Directories created${NC}"
 
-# Step 4: Set permissions
+# Step 4: Set permissions (HC-10: MUST exit 1 if permission setup fails)
 echo ""
 echo -e "${BLUE}[Step 4/7] Setting permissions...${NC}"
 PUID=$(grep "^PUID=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
 PGID=$(grep "^PGID=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
 
-if [ -n "$PUID" ] && [ -n "$PGID" ]; then
-    chown -R "$PUID:$PGID" "$PKI_DIR"/{step_data,db_data,logs} 2>/dev/null || \
-        echo -e "${YELLOW}⚠ Could not set ownership (may need sudo)${NC}"
-    chmod 700 "$PKI_DIR/.env" 2>/dev/null || true
-    echo -e "${GREEN}✓ Permissions set${NC}"
-else
-    echo -e "${YELLOW}⚠ Could not read PUID/PGID from .env${NC}"
+if [ -z "$PUID" ] || [ -z "$PGID" ]; then
+    echo -e "${RED}✗ Could not read PUID/PGID from .env — aborting.${NC}"
+    exit 1
 fi
+
+if ! chown -R "$PUID:$PGID" "$PKI_DIR"/{step_data,db_data,logs} 2>/dev/null; then
+    # chown fails for non-root users even when ownership is already correct.
+    # Verify actual ownership before deciding to abort.
+    OWNERSHIP_OK=true
+    for dir in "$PKI_DIR/step_data" "$PKI_DIR/db_data" "$PKI_DIR/logs"; do
+        CURRENT=$(stat -c '%u:%g' "$dir" 2>/dev/null || echo "unknown")
+        if [ "$CURRENT" != "$PUID:$PGID" ]; then
+            OWNERSHIP_OK=false
+            echo -e "${RED}  ✗ $dir is owned by $CURRENT (expected $PUID:$PGID)${NC}"
+        fi
+    done
+    if [ "$OWNERSHIP_OK" != "true" ]; then
+        echo -e "${RED}✗ Permission setup failed. Re-run with sudo. Aborting (containers would fail with cryptic 'Permission denied').${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Ownership already correct ($PUID:$PGID)${NC}"
+fi
+chmod 700 "$PKI_DIR/.env" 2>/dev/null || true
+echo -e "${GREEN}✓ Permissions set${NC}"
 
 # Step 5: Pull/build images
 echo ""
