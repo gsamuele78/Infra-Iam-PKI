@@ -45,7 +45,7 @@ docker run --rm \
     --network host \
     -v "$(dirname "$CRT_FILE")":/home/step \
     --user $(id -u):$(id -g) \
-    smallstep/step-cli \
+    smallstep/step-cli:0.29.0 \
     step ca renew "/home/step/$(basename "$CRT_FILE")" "/home/step/$(basename "$KEY_FILE")" \
     --ca-url "$CA_URL" || true 
     # || true because it might fail if not renewable yet, and we don't want script to crash script
