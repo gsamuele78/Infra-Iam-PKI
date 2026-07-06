@@ -5,6 +5,14 @@ set -euo pipefail
 # Validates all Infra-PKI configuration files before deployment
 # Location: /opt/docker/Infra-Iam-PKI/scripts/infra-pki/validate_config.sh
 
+# --- Dependency Assertions (HC-13) ---
+for bin in docker grep stat; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        echo "Error: required binary '$bin' is not installed." >&2
+        exit 1
+    fi
+done
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKI_DIR="$SCRIPT_DIR/../../infra-pki"
 
@@ -124,7 +132,7 @@ else
     if docker run --rm \
         -v "$PKI_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile" \
         -e ALLOWED_IPS="127.0.0.1/32" \
-        infra-pki-caddy:latest \
+        infra-pki-caddy:local \
         caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid"; then
         success "Caddyfile syntax is valid"
     else
@@ -132,7 +140,7 @@ else
         docker run --rm \
             -v "$PKI_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile" \
             -e ALLOWED_IPS="127.0.0.1/32" \
-            infra-pki-caddy:latest \
+            infra-pki-caddy:local \
             caddy validate --config /etc/caddy/Caddyfile 2>&1 | head -10
     fi
 fi
@@ -194,11 +202,23 @@ if grep -q "ALLOWED_IPS=" "$PKI_DIR/.env"; then
     else
         success "ALLOWED_IPS is configured: $ALLOWED_IPS"
         
-        # Check if localhost is allowed
+        # Check if localhost is allowed (informational: Caddy in a container
+        # never sees 127.0.0.1 as remote IP — the bridge subnet is what matters)
         if echo "$ALLOWED_IPS" | grep -q "127.0.0.1"; then
             success "Localhost access is enabled"
-        else
-            warning "Localhost (127.0.0.1) is not in ALLOWED_IPS"
+        fi
+
+        # Check pki-net bridge subnet coverage (subnet drift protection).
+        # Host-originated connections reach Caddy L4 with the pki-net gateway
+        # as source IP. If the subnet is not allowlisted, Caddy silently drops
+        # them (curl code 000) even though all containers are healthy.
+        PKI_NET_SUBNET=$(docker network inspect pki-net --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || echo "")
+        if [ -n "$PKI_NET_SUBNET" ]; then
+            if echo "$ALLOWED_IPS" | grep -qF "$PKI_NET_SUBNET"; then
+                success "pki-net subnet ($PKI_NET_SUBNET) is covered by ALLOWED_IPS"
+            else
+                warning "pki-net subnet ($PKI_NET_SUBNET) is NOT in ALLOWED_IPS — add it to .env or host health checks will fail (code 000)"
+            fi
         fi
     fi
 fi
@@ -255,9 +275,11 @@ if [[ "$MODE" == "all" || "$MODE" == "post" ]]; then
 # Check 12: PostgreSQL Connectivity (if running)
 echo ""
 echo "Checking PostgreSQL..."
-# Source .env if available to get credentials
+# Read credentials with the project-standard pattern (never source .env:
+# unsafe with special characters in passwords)
 if [ -f "$PKI_DIR/.env" ]; then
-    source "$PKI_DIR/.env"
+    POSTGRES_USER=$(grep "^POSTGRES_USER=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
+    POSTGRES_DB=$(grep "^POSTGRES_DB=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
     # Check if we can reach the DB container if it's running
     if docker compose -f "$PKI_DIR/docker-compose.yml" ps postgres | grep -q "Up"; then
         echo "  Testing Postgres connection inside container..."
@@ -296,6 +318,20 @@ if [ -f "$PKI_DIR/.env" ]; then
         fi
     else
          warning "step-ca container is not running (cannot verify cross-container connection)"
+    fi
+
+    # Check 15: pki-net subnet MUST be in ALLOWED_IPS (post-deploy = hard error).
+    # If the bridge subnet drifted (e.g. after a reset recreated the network),
+    # Caddy L4 silently drops all host-originated connections (curl code 000).
+    echo "  Checking pki-net subnet coverage in ALLOWED_IPS..."
+    ALLOWED_IPS=$(grep "^ALLOWED_IPS=" "$PKI_DIR/.env" | cut -d= -f2- | tr -d '"')
+    PKI_NET_SUBNET=$(docker network inspect pki-net --format '{{(index .IPAM.Config 0).Subnet}}' 2>/dev/null || echo "")
+    if [ -z "$PKI_NET_SUBNET" ]; then
+        error "pki-net network not found — stack not deployed correctly"
+    elif echo "$ALLOWED_IPS" | grep -qF "$PKI_NET_SUBNET"; then
+        success "pki-net subnet ($PKI_NET_SUBNET) is covered by ALLOWED_IPS"
+    else
+        error "pki-net subnet ($PKI_NET_SUBNET) is NOT in ALLOWED_IPS — host health checks WILL fail (code 000). Add it to .env, then 'docker compose restart caddy'."
     fi
 fi
 
