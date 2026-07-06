@@ -3,6 +3,14 @@
 
 set -euo pipefail
 
+# --- Dependency Assertions (HC-13) ---
+for bin in docker grep find; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        echo "Error: required binary '$bin' is not installed." >&2
+        exit 1
+    fi
+done
+
 # Configuration
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../infra-pki" && pwd)"
 BACKUP_ROOT="/backup/infra-pki"
@@ -23,9 +31,11 @@ else
     echo "Warning: step_data directory not found."
 fi
 
-# Source .env to get DB credentials
+# Read DB credentials with the project-standard pattern (never source .env:
+# unsafe with special characters in passwords)
+POSTGRES_USER=""
 if [ -f "$PROJECT_DIR/.env" ]; then
-    source "$PROJECT_DIR/.env"
+    POSTGRES_USER=$(grep "^POSTGRES_USER=" "$PROJECT_DIR/.env" | cut -d= -f2- | tr -d '"' || true)
 fi
 
 # 2. Backup Database (Postgres)
