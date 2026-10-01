@@ -248,6 +248,7 @@ known_issues:
     severity: "P1"
     component: "infra-rstudio"
     issue: "RStudio images don't build (vendored from R-studioConf): Dockerfile.sssd/samba install r-cran-bspm/python3-bspm before adding the c2d4u PPA (no noble build), and sssd-client is not an Ubuntu package. Fix in R-studioConf."
+    status: "fixed in R-studioConf 47441c5 (PR #16, TD-T2-05), vendored; all three images build in its monster build"
 
 # ──────────────────────────────────────────────────────────────
 # BRANDING

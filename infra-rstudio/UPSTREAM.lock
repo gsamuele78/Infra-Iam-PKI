@@ -3,7 +3,7 @@
   "upstream": {
     "repo": "https://github.com/gsamuele78/R-studioConf.git",
     "ref": "main",
-    "commit": "6523d0505f3b945929bcf7a638b5be47ec75a44d"
+    "commit": "47441c5403fcf805a3713d9d59eaefec6f21a961"
   },
   "mappings": [
     {
