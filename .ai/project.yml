@@ -20,7 +20,7 @@
 
 project:
   name: "Infra-IAM-PKI"
-  version: "3.1.0"
+  version: "3.4.0"
   owner: "JFS — IT Officer (Funzionario Tecnico Informatico), BiGeA, Università di Bologna"
   paradigm: "Pessimistic System Engineering"
   paradigm_definition: "Assume failure. Bound all resources. Verify all trust chains. Fail fast on misconfiguration."
