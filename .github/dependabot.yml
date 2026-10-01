@@ -1,0 +1,49 @@
+# .github/dependabot.yml
+# Image tags in the compose files and Dockerfiles, and the pinned action SHAs.
+# The RStudio trees are vendored: their versions are bumped in R-studioConf and
+# arrive through the rstudio-upstream-sync PR, so they are not listed here.
+# Every Dependabot PR runs the same lint/security CI; merge after the lab tier
+# for the touched stack (doc/SANDBOX_TESTING.md).
+version: 2
+updates:
+  - package-ecosystem: docker-compose
+    directories:
+      - /infra-pki
+      - /infra-iam
+      - /infra-ood
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      # Built locally from the stack's own Dockerfiles, not pulled.
+      - dependency-name: "infra-*"
+    groups:
+      compose-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: docker
+    directories:
+      - /infra-pki/caddy
+      - /infra-iam
+      - /infra-ood
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      base-images:
+        patterns: ["*"]
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

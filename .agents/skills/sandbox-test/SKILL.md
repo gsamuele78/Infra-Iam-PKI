@@ -23,6 +23,7 @@ Changes to `infra-pki/docker-compose.yml` DIRECTLY affect the sandbox. There is 
 ## Testing Protocol
 
 ### Step 1: Clean Start
+
 ```bash
 cd sandbox/
 vagrant destroy -f           # Clean slate
@@ -30,6 +31,7 @@ vagrant up pki-host          # PKI must start first
 ```
 
 ### Step 2: Verify PKI
+
 ```bash
 vagrant ssh pki-host -c "docker compose -f /workspace/Infra-Iam-PKI/infra-pki/docker-compose.yml ps"
 # All containers should be healthy
@@ -38,6 +40,7 @@ curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint
 ```
 
 ### Step 3: Start Dependent VMs
+
 ```bash
 vagrant up iam-host          # Fetches fingerprint from pki-host automatically
 vagrant up ood-host          # Same fingerprint fetch
@@ -45,6 +48,7 @@ vagrant up rstudio-host      # Same fingerprint fetch
 ```
 
 ### Step 4: Verify IAM
+
 ```bash
 vagrant ssh iam-host -c "docker compose -f /workspace/Infra-Iam-PKI/sandbox/iam-sandbox.yml ps"
 # Keycloak should be healthy
@@ -52,6 +56,7 @@ curl -sf http://192.168.56.20/health
 ```
 
 ### Step 5: Verify RStudio
+
 ```bash
 vagrant ssh rstudio-host -c "docker compose -f /workspace/Infra-Iam-PKI/sandbox/rstudio-sandbox.yml ps"
 # Health check container: rstudio_pet (NOT nginx_portal — that was the old name, fixed in Phase 1)
@@ -59,7 +64,9 @@ curl -sf http://192.168.56.40/health
 ```
 
 ### Step 6: Push Code Changes
+
 After modifying files locally:
+
 ```bash
 vagrant rsync                # Push changes to all VMs
 vagrant ssh pki-host         # SSH in and restart affected service

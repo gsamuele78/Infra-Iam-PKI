@@ -79,6 +79,7 @@ Nginx session timeouts are synchronized with RStudio (`RSESSION_TIMEOUT_MINUTES`
 The container autonomously imports Root of Trust (Step-CA or AD-CS) at startup. The `manage_pki_trust.sh` script (v2.0) uses mandatory SHA256 fingerprint verification before installing the Root CA — blocking Man-in-the-Middle attacks within the institutional DMZ.
 
 Trust chain bootstrap:
+
 1. `rstudio-init` starts first (ephemeral init container)
 2. Calls `manage_pki_trust.sh CA_URL CA_FINGERPRINT` with mandatory fingerprint verification
 3. Root CA installed into system trust store AND shared `/certs` volume

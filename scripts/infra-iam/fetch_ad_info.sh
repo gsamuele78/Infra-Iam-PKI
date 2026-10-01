@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v openssl >/dev/null 2>&1 || { echo "ERROR: required binary 'openssl' not found in PATH" >&2; exit 1; }
+
 # fetch_ad_info.sh
 # Connects to an AD server via LDAPS (port 636) to:
 # 1. Fetch the Certificate Chain

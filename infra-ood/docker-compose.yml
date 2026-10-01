@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.init
     container_name: ood-init
+    restart: "no" # one-shot: ood-portal waits on service_completed_successfully
     user: root
     networks: [ ood-net ]
     deploy:
@@ -31,6 +32,14 @@ services:
     user: root
     # privileged: true  # REMOVED: contradicts cap_drop, use specific caps
     restart: unless-stopped
+    healthcheck:
+      # An unauthenticated request gets a redirect to Keycloak (3xx), which
+      # curl -f counts as success; a dead Apache or a 5xx fails.
+      test: [ "CMD-SHELL", "curl -fsS -o /dev/null http://localhost/ || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       ood-init:
         condition: service_completed_successfully

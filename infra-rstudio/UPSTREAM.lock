@@ -1,0 +1,45 @@
+{
+  "_comment": "Generated and updated by scripts/infra-rstudio/sync_rstudioconf.sh. Edit only repo/ref/mappings/local by hand; never edit vendored files (fix them in R-studioConf).",
+  "upstream": {
+    "repo": "https://github.com/gsamuele78/R-studioConf.git",
+    "ref": "main",
+    "commit": "6523d0505f3b945929bcf7a638b5be47ec75a44d"
+  },
+  "mappings": [
+    {
+      "from": "docker-deploy",
+      "to": "infra-rstudio",
+      "local": [
+        ".env.example",
+        ".env.sandbox",
+        "UPSTREAM.lock"
+      ]
+    },
+    {
+      "from": "kubernetes-deploy",
+      "to": "kubernetes-deploy/rstudio",
+      "local": []
+    },
+    {
+      "from": "scripts",
+      "to": "scripts/infra-rstudio",
+      "files": [
+        "99_audit_r_environment.sh",
+        "99_health_check.sh",
+        "99_troubleshoot_env.sh",
+        "99_verify_domain_join.sh",
+        "test_rstudio_login.sh",
+        "ttyd_login_wrapper.sh",
+        "tools/bigger_usage_reports.sh",
+        "tools/check_installed_R_Package.R",
+        "tools/check_installed_R_Package.sh",
+        "tools/check_pkg_config.sh",
+        "tools/check_processor_threads.sh",
+        "tools/deployment_summary.sh",
+        "tools/hw_report.sh",
+        "tools/manage_r_sessions.sh"
+      ],
+      "_note": "T1 host diagnostics. 99_audit/99_health_check/99_troubleshoot expect the R-studioConf root layout (../lib, ../config, ../templates) and only work from an R-studioConf checkout."
+    }
+  ]
+}

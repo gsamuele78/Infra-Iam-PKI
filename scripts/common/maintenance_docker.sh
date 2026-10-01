@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # Docker Maintenance Script
 # Usage: ./maintenance_docker.sh [prune|monitor|nuke]
 
@@ -56,10 +59,10 @@ if [ "$MODE" == "nuke" ]; then
     fi
     
     echo "Stopping all containers..."
-    docker stop $(docker ps -aq) 2>/dev/null || true
+    docker ps -aq | xargs -r docker stop >/dev/null 2>&1 || true
     
     echo "Removing all containers..."
-    docker rm $(docker ps -aq) 2>/dev/null || true
+    docker ps -aq | xargs -r docker rm >/dev/null 2>&1 || true
     
     echo "Pruning entire system (volumes + images)..."
     docker system prune -a --volumes --force

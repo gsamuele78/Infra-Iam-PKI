@@ -40,7 +40,7 @@ ChatGPT supports several context injection methods. Choose the one that fits you
 
 **Copy this block into Custom Instructions or paste at conversation start:**
 
-```
+```text
 PROJECT: Infra-IAM-PKI (internal PKI + Keycloak SSO + Open OnDemand portal)
 PARADIGM: Pessimistic System Engineering — assume failure, bound resources, fail fast.
 
@@ -66,7 +66,7 @@ COMPOSE FORMAT:
 PINNED VERSIONS (do not change):
 - step-ca: 0.29.0 | step-cli: 0.29.0 | postgres: 15-alpine
 - keycloak: 26.0.7 (quay.io) | caddy: 2.9.1-alpine
-- watchtower: 1.7.1 (containrrr) | docker-socket-proxy: edge (tecnativa)
+- watchtower: 1.7.1 (containrrr) | docker-socket-proxy: 0.3.0 (tecnativa)
 - oauth2-proxy: v7.6.0 (quay.io/oauth2-proxy)
 - OOD: built from Dockerfile.ood using Ubuntu Noble 24.04 debs (apt.osc.edu)
 
@@ -212,7 +212,7 @@ Scripts are the operational API. Operators run scripts, not `docker compose` dir
 
 ChatGPT must understand this chain before modifying any script:
 
-```
+```text
 generate_token.sh
   └─produces─► {hostname}_join_pki.env (file with CA_URL, FINGERPRINT, TOKEN)
                     │
@@ -283,7 +283,7 @@ This script is documented as broken (dangling EOF, references non-existent compo
 
 ### Template: Modify a Compose Service
 
-```
+```text
 I need to modify the [SERVICE] service in [STACK]/docker-compose.yml.
 
 Change: [DESCRIPTION]
@@ -299,7 +299,7 @@ Follow the rules from chatgpt.md:
 
 ### Template: Write a New Script
 
-```
+```text
 Create a new script: scripts/[PATH]/[NAME].sh
 
 Purpose: [DESCRIPTION]
@@ -315,7 +315,7 @@ Follow the rules from chatgpt.md:
 
 ### Template: Debug a Container
 
-```
+```text
 Container [NAME] is [SYMPTOM].
 Stack: [pki|iam|ood]
 Environment: [production|sandbox]

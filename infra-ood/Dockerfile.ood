@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------
 # 2. Install OOD from official OSC apt repository (Ubuntu Noble = 24.04)
 # ----------------------------------------------------------------
-RUN wget -O /tmp/ondemand-release-web_4.1.0-noble_all.deb \
+RUN wget -nv -O /tmp/ondemand-release-web_4.1.0-noble_all.deb \
     https://apt.osc.edu/ondemand/4.1/ondemand-release-web_4.1.0-noble_all.deb && \
     apt-get install -y --no-install-recommends /tmp/ondemand-release-web_4.1.0-noble_all.deb && \
     apt-get update && \

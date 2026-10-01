@@ -1,0 +1,115 @@
+# .github/workflows/security-scan.yml
+# gitleaks: PRs and pushes scan only their own commits; the weekly run scans the
+# whole history and stays red until the history purge (ALIGNMENT-PLAN Q1) is done.
+# trivy: misconfiguration scan of the non-vendored files, then a CVE scan of every
+# image the four stacks run (RStudio included: R-studioConf CI has no image scan).
+name: security-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1" # Monday 04:00 UTC, full-history gitleaks
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  TRIVY_IMAGE: aquasec/trivy:0.74.0
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: scan
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request) range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" ;;
+            push)         range="${{ github.event.before }}..${{ github.sha }}" ;;
+            *)            range="" ;;   # schedule / dispatch: whole history
+          esac
+          # A new branch push has before=0000…: scan just the pushed commit then.
+          case "$range" in 0000000000000000000000000000000000000000..*) range="${{ github.sha }}~1..${{ github.sha }}" ;; esac
+          docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" git \
+            --config tests/lint/.gitleaks.toml --redact --no-banner \
+            ${range:+--log-opts="$range"} .
+
+  trivy-config:
+    name: trivy misconfiguration (Dockerfiles, compose; K8s report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Dockerfiles and compose (blocking)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
+            --severity CRITICAL,HIGH --exit-code 1 \
+            --ignorefile tests/lint/.trivyignore.yaml \
+            --skip-dirs infra-rstudio --skip-dirs kubernetes-deploy .
+      # K8s is experimental (ALIGNMENT-PLAN Q4): findings are listed, not enforced.
+      - name: kubernetes-deploy (report-only)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
+            --severity CRITICAL,HIGH --exit-code 0 \
+            --skip-dirs kubernetes-deploy/rstudio kubernetes-deploy
+
+  # Report-only for now: the upstream images carry CVEs this repo can't fix in
+  # place (watchtower 1.7.1 is unmaintained, caddy 2.9.1, the OOD base). Counts go
+  # to the job summary and CHANGELOG "Known issues"; Dependabot proposes the bumps.
+  # A stack whose images don't build is a warning here and a known issue.
+  trivy-images:
+    name: trivy CVE scan (${{ matrix.stack }}, report-only)
+    runs-on: ubuntu-24.04
+    # The rocker/geospatial RStudio images take long to build.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [infra-pki, infra-iam, infra-ood, infra-rstudio]
+    env:
+      # Only infra-rstudio uses profiles; enabling all of them builds every image.
+      COMPOSE_PROFILES: sssd,samba,portal,oidc,ai
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: build
+        id: build
+        continue-on-error: true
+        working-directory: ${{ matrix.stack }}
+        run: docker compose --env-file .env.sandbox build
+      - name: report a failed build
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::warning::${{ matrix.stack }}: images did not build; locally built images are not scanned"
+          echo "**${{ matrix.stack }}**: images did not build (see the build step); only pulled images are scanned." >> "$GITHUB_STEP_SUMMARY"
+      - name: scan every image of the stack (built and pulled)
+        working-directory: ${{ matrix.stack }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### ${{ matrix.stack }}: fixable CRITICAL/HIGH"
+            echo "| image | CRITICAL | HIGH |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for img in $(docker compose --env-file .env.sandbox config --images | sort -u); do
+            echo "::group::$img"
+            if ! docker image inspect "$img" >/dev/null 2>&1 && ! docker pull -q "$img"; then
+              echo "| \`$img\` | not available | |" >> "$GITHUB_STEP_SUMMARY"; echo "::endgroup::"; continue
+            fi
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+              --severity CRITICAL,HIGH --ignore-unfixed --no-progress --format json --quiet "$img" > "$RUNNER_TEMP/r.json"
+            crit=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$RUNNER_TEMP/r.json")
+            high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$RUNNER_TEMP/r.json")
+            echo "$img: CRITICAL=$crit HIGH=$high"
+            echo "| \`$img\` | $crit | $high |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$crit" -eq 0 ] || echo "::warning::$img has $crit fixable CRITICAL vulnerabilities"
+            echo "::endgroup::"
+          done

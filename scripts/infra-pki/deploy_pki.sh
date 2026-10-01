@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+for _bin in docker curl; do
+    command -v "$_bin" >/dev/null 2>&1 || { echo "ERROR: required binary '$_bin' not found in PATH" >&2; exit 1; }
+done
+
 # fix
 # deploy_pki.sh
 # Comprehensive deployment script for Infra-PKI

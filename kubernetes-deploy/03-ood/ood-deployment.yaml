@@ -16,7 +16,7 @@ spec:
       # OOD often requires root initially to spawn user-level PUNs
       securityContext:
         runAsUser: 0
-      
+
       initContainers:
       # Pessimistic Init: Fetch PKI Root for Internal Trust mapping
       - name: fetch-pki-certs
@@ -73,7 +73,7 @@ spec:
           mountPath: /etc/pki/ca-trust/source/anchors/step-ca.crt
           subPath: root_ca.crt
           readOnly: true
-      
+
       volumes:
       - name: config-vol
         configMap:

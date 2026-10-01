@@ -42,6 +42,7 @@ scripts/infra-rstudio/deploy_rstudio.sh
 ```
 
 The deployment script will:
+
 1. Start `rstudio-init` (ephemeral container) which fetches Root CA from `CA_URL`, verifies it against `CA_FINGERPRINT`, and installs it to the shared `/certs` volume.
 2. Start `nginx-portal` which reads the Root CA from `/certs` for upstream TLS verification.
 3. If `STEP_TOKEN` is set, Nginx will also enroll its own TLS certificate via the Step-CA ACME endpoint.

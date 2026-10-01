@@ -20,7 +20,7 @@
 
 project:
   name: "Infra-IAM-PKI"
-  version: "2.0.0"
+  version: "3.4.0"
   owner: "JFS — IT Officer (Funzionario Tecnico Informatico), BiGeA, Università di Bologna"
   paradigm: "Pessimistic System Engineering"
   paradigm_definition: "Assume failure. Bound all resources. Verify all trust chains. Fail fast on misconfiguration."
@@ -143,7 +143,6 @@ script_categories:
       - "infra-rstudio/scripts/entrypoint_nginx.sh"
       - "infra-rstudio/scripts/entrypoint_auth_pet.sh"
       - "infra-rstudio/scripts/manage_pki_trust.sh"
-      - "infra-rstudio/scripts/docker-entrypoint.sh"
       - "infra-rstudio/scripts/maintenance_entrypoint.sh"
 
   operator_interactive:
@@ -181,46 +180,55 @@ known_issues:
     severity: "P2"
     component: "infra-pki"
     issue: "fingerprint-writer writes to fingerprint/root_ca.fingerprint (dir) but deploy_pki.sh checks step_data/fingerprint (file). Path inconsistency."
+    status: "fixed in 3445020 (deploy_pki.sh reads fingerprint/root_ca.fingerprint)"
 
   - id: "TD-02"
     severity: "P0"
     component: "infra-iam"
     issue: "Keycloak JAVA_OPTS_APPEND Xms2048m/Xmx4096m exceeds container memory limit of 2048M. Must be Xms512m/Xmx1536m max."
+    status: "fixed in 3445020 (-Xms512m -Xmx1536m)"
 
   - id: "TD-03"
     severity: "P1"
     component: "infra-iam"
     issue: "renew_certificate.sh restarts Keycloak on EVERY 24h loop iteration, not only when renewal actually happened."
+    status: "fixed in 3.4.0 (renewer: needs-renewal + exit codes, restart only on a new cert, --root instead of the invalid --fingerprint)"
 
   - id: "TD-04"
     severity: "P1"
     component: "infra-iam"
     issue: ".env file mounted as volume (.env:/app/.env) leaks all secrets into init container."
+    status: "fixed in 3445020 (no .env mount in iam-init)"
 
   - id: "TD-05"
     severity: "P3"
     component: "infra-pki"
     issue: "patch_ca_config.sh runs on EVERY container start, even when ca.json is already correct. Idempotent but noisy."
+    status: "verified: exits early when ca.json already uses PostgreSQL (one log line per start); kept by design"
 
   - id: "TD-06"
     severity: "P2"
     component: "infra-ood"
     issue: "Dockerfile.ood pulls ondemand-release-web_4.1.0 — no version pinning for the main ondemand package."
+    status: "fixed in 53ae12f (apt pin ondemand=4.1.*)"
 
   - id: "TD-07"
     severity: "P2"
     component: "kubernetes"
     issue: "Keycloak image pinned to 23.0 in K8s manifests but 26.0.7 in Docker compose."
+    status: "fixed in 53ae12f (K8s keycloak 26.0.7)"
 
   - id: "TD-08"
     severity: "P2"
     component: "kubernetes"
-    issue: "step-ca image pinned to 0.25.2 in K8s but 0.29.0 in Docker compose."
+    issue: "step-cli pinned to 0.25.2 in K8s (03-ood, and the vendored rstudio manifests) but 0.29.0 in Docker compose. step-ca itself is 0.29.0 since 53ae12f."
+    status: "fixed: every K8s step-cli is 0.29.0 (rstudio part in R-studioConf 32a99b8, vendored)"
 
   - id: "TD-09"
     severity: "P3"
     component: "sandbox"
     issue: "full_sandbox_launcher.sh has dangling EOF and references non-existent docker-compose.sandbox.yml."
+    status: "fixed in 53ae12f (full_sandbox_launcher.sh removed)"
 
   - id: "TD-10"
     severity: "P3"
@@ -230,7 +238,16 @@ known_issues:
   - id: "TD-11"
     severity: "P3"
     component: "root"
-    issue: "P0-FIXES.sh and ALL-FIXES.sh moved to scripts/legacy/ — stale one-shot audit scripts. Do not re-run."
+    issue: "P0-FIXES.sh and ALL-FIXES.sh were stale one-shot audit scripts."
+    status: "fixed in 3.1.0 (scripts/legacy/ removed)"
+  - id: "TD-12"
+    severity: "P3"
+    component: "kubernetes"
+    issue: "03-ood/ood-deployment.yaml runs osc/ondemand:3.1.0 (never published) with RHEL commands (update-ca-trust, httpd); the compose stack builds an Ubuntu image from infra-ood/Dockerfile.ood. K8s is experimental (Q4): needs the Dockerfile.ood image pushed to a registry and Ubuntu commands."
+  - id: "TD-13"
+    severity: "P1"
+    component: "infra-rstudio"
+    issue: "RStudio images don't build (vendored from R-studioConf): Dockerfile.sssd/samba install r-cran-bspm/python3-bspm before adding the c2d4u PPA (no noble build), and sssd-client is not an Ubuntu package. Fix in R-studioConf."
 
 # ──────────────────────────────────────────────────────────────
 # BRANDING

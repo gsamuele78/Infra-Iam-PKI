@@ -69,6 +69,14 @@ else
     ok "Docker dependencies present"
 fi
 
+# Upstream (R-studioConf, vendored) pre-flight: site files that are bind-mounted
+# (config/site/admin_recipients.txt, config/oauth2-proxy.cfg). A missing source
+# file would otherwise be created by Docker as an empty directory. No prompt to
+# continue: this one is a hard stop.
+if ! "$RSTUDIO_DIR/scripts/validate_deployment.sh"; then
+    error "Upstream pre-flight (infra-rstudio/scripts/validate_deployment.sh) failed"
+fi
+
 # ---------------------------------------------------------------------------
 # Step 2: Read AUTH_BACKEND from .env (safe grep, no source)
 # ---------------------------------------------------------------------------

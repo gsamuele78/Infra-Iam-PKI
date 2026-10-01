@@ -50,7 +50,7 @@ The BIOME research group (Biodiversity & MacroEcology) at the Department of Biol
 
 ### 2.1 Production Topology (Multi-Host)
 
-```
+```text
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │    PKI Host      │    │    IAM Host      │    │    OOD Host      │    │  RStudio Host    │
 │  192.168.56.10   │    │  192.168.56.20   │    │  192.168.56.30   │    │  192.168.56.40   │
@@ -74,7 +74,7 @@ The BIOME research group (Biodiversity & MacroEcology) at the Department of Biol
 
 ### 2.2 Trust Chain
 
-```
+```text
 step-ca Root CA
     ├──► Caddy (IAM) — ACME auto-cert for DOMAIN_SSO
     ├──► Keycloak — TLS cert via iam-renewer sidecar
@@ -121,7 +121,7 @@ step-ca Root CA
 
 ## 3. Directory Structure
 
-```
+```text
 Infra-Iam-PKI/
 ├── infra-pki/                     # PKI stack
 │   ├── docker-compose.yml         # Production compose
@@ -311,7 +311,7 @@ These are non-negotiable constraints. Any code that violates them is **rejected*
 
 ### 6.1 Infra-PKI Boot Sequence
 
-```
+```text
 1. init-files (root)     → mkdir, write password file, chown PUID:PGID
 2. postgres              → waits for init-files; starts DB; healthcheck pg_isready
 3. step-ca               → waits for postgres healthy; runs entrypoint:
@@ -328,7 +328,7 @@ These are non-negotiable constraints. Any code that violates them is **rejected*
 
 ### 6.2 Infra-IAM Boot Sequence
 
-```
+```text
 1. iam-init (root)       → mkdir, chown, fetch_pki_root.sh, fetch_ad_cert.sh
 2. docker-socket-proxy   → starts independently
 3. iam-db                → waits for iam-init; starts postgres; healthcheck
@@ -340,7 +340,7 @@ These are non-negotiable constraints. Any code that violates them is **rejected*
 
 ### 6.3 Sandbox VM Workflow
 
-```
+```text
 vagrant up pki-host      → Install Docker, cp .env.sandbox → .env, docker compose up
                           → pki-test-probe validates fingerprint endpoint
 vagrant up iam-host      → Install Docker, curl fingerprint from pki-host:80
@@ -357,7 +357,7 @@ Scripts are the **primary operational interface**. Operators never run `docker c
 
 ### 7.1 Script Dependency Graph
 
-```
+```text
 generate_token.sh ──produces──► {hostname}_join_pki.env
                                        │
                     configure_iam_pki.sh ◄──consumes──┘
@@ -371,7 +371,7 @@ generate_token.sh ──produces──► {hostname}_join_pki.env
                            └──calls──► validate_iam_config.sh --post-deploy
 ```
 
-```
+```text
 deploy_pki.sh
     ├──calls──► validate_config.sh --pre-deploy
     ├──reads──► infra-pki/.env (PUID, PGID, ALLOWED_IPS)
@@ -428,9 +428,9 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 
 ### 7.6 Operational Workflows (Day-to-Day)
 
-**Workflow A: Enroll a new SSH host**
+#### Workflow A: Enroll a new SSH host
 
-```
+```text
 [PKI Host] generate_token.sh → produces db-01_join_pki.env
 [Operator] SCP join_pki.sh + db-01_join_pki.env → remote host
 [Remote]   sudo ./join_pki.sh ssh-host
@@ -442,9 +442,9 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
            → restarts sshd
 ```
 
-**Workflow B: Re-establish IAM trust after PKI re-init**
+#### Workflow B: Re-establish IAM trust after PKI re-init
 
-```
+```text
 [PKI Host] generate_token.sh → produces infra-iam_join_pki.env
 [IAM Host] configure_iam_pki.sh /path/to/infra-iam_join_pki.env
            → reads CA_URL + FINGERPRINT from file
@@ -452,9 +452,9 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 [IAM Host] deploy_iam.sh (or docker compose restart iam-init keycloak)
 ```
 
-**Workflow C: Full stack deployment from scratch**
+#### Workflow C: Full stack deployment from scratch
 
-```
+```text
 [PKI Host] configure_pki.sh → set passwords, toggle provisioners
            deploy_pki.sh    → 7-step deploy, waits for healthy
            verify_pki.sh    → confirm operational
@@ -463,9 +463,9 @@ backup_pki.sh   (standalone — reads .env, pg_dumpall, copies step_data)
 [OOD Host] deploy_ood.sh    → builds Dockerfile.ood, starts portal
 ```
 
-**Workflow D: Backup and restore**
+#### Workflow D: Backup and restore
 
-```
+```text
 [PKI Host] backup_pki.sh  → /backup/infra-pki/{timestamp}/
                              contains: step_data/, db_dump.sql, .env
            Auto-rotation: backups older than 7 days are purged
@@ -601,15 +601,17 @@ These are documented bugs or incomplete areas. Do NOT "fix" them without explici
 
 | ID | Component | Issue | Status |
 |----|-----------|-------|--------|
-| TD-01 | infra-pki | `fingerprint-writer` writes to `fingerprint/root_ca.fingerprint` (directory), but `deploy_pki.sh` checks `step_data/fingerprint` (file). Path inconsistency. | Documented in sandbox README |
-| TD-02 | infra-iam | Keycloak `JAVA_OPTS_APPEND: "-Xms2048m -Xmx4096m"` exceeds the container memory limit of 2048M. Must be `-Xms512m -Xmx1536m` max. | P0 from audit |
-| TD-03 | infra-iam | `renew_certificate.sh` restarts Keycloak on EVERY 24h loop iteration, not only when renewal actually happened. | P1 from audit |
-| TD-04 | infra-iam | `.env` file is mounted as a volume (`.env:/app/.env`) — leaks all secrets into init container. | P1 from audit |
-| TD-05 | infra-pki | `patch_ca_config.sh` runs on EVERY container start, even when ca.json is already correct. | Minor — idempotent but noisy |
-| TD-06 | infra-ood | `Dockerfile.ood` pulls `ondemand-release-web_4.1.0` — no version pinning for the main `ondemand` package. | P2 |
-| TD-07 | kubernetes | Keycloak image pinned to `23.0` in K8s manifests but `26.0.7` in Docker compose. | Drift |
-| TD-08 | kubernetes | step-ca image pinned to `0.25.2` in K8s but `0.29.0` in Docker compose. | Drift |
-| TD-09 | sandbox | `full_sandbox_launcher.sh` has dangling `EOF` and references non-existent `docker-compose.sandbox.yml`. | Broken script |
+| TD-01 | infra-pki | `fingerprint-writer` writes to `fingerprint/root_ca.fingerprint` (directory), but `deploy_pki.sh` checks `step_data/fingerprint` (file). Path inconsistency. | Fixed in `3445020`: `deploy_pki.sh` reads `fingerprint/root_ca.fingerprint` |
+| TD-02 | infra-iam | Keycloak `JAVA_OPTS_APPEND: "-Xms2048m -Xmx4096m"` exceeds the container memory limit of 2048M. Must be `-Xms512m -Xmx1536m` max. | Fixed in `3445020`: `-Xms512m -Xmx1536m` |
+| TD-03 | infra-iam | `renew_certificate.sh` restarts Keycloak on EVERY 24h loop iteration, not only when renewal actually happened. | Fixed in 3.4.0: `needs-renewal` + exit codes, restart only on a new cert, `--root` (the old `--fingerprint` call always failed) |
+| TD-04 | infra-iam | `.env` file is mounted as a volume (`.env:/app/.env`) — leaks all secrets into init container. | Fixed in `3445020`: no `.env` mount |
+| TD-05 | infra-pki | `patch_ca_config.sh` runs on EVERY container start, even when ca.json is already correct. | By design: exits after one log line when `ca.json` already uses PostgreSQL |
+| TD-06 | infra-ood | `Dockerfile.ood` pulls `ondemand-release-web_4.1.0` — no version pinning for the main `ondemand` package. | Fixed in `53ae12f`: `ondemand=4.1.*` |
+| TD-07 | kubernetes | Keycloak image pinned to `23.0` in K8s manifests but `26.0.7` in Docker compose. | Fixed in `53ae12f`: K8s Keycloak `26.0.7` |
+| TD-08 | kubernetes | step-ca image pinned to `0.25.2` in K8s but `0.29.0` in Docker compose. | Fixed: every K8s step-cli is `0.29.0` (rstudio part in R-studioConf `32a99b8`, vendored) |
+| TD-09 | sandbox | `full_sandbox_launcher.sh` has dangling `EOF` and references non-existent `docker-compose.sandbox.yml`. | Fixed in `53ae12f`: script removed |
+| TD-12 | kubernetes | `03-ood/ood-deployment.yaml` runs `osc/ondemand:3.1.0` (never published) with RHEL commands; compose builds an Ubuntu image from `Dockerfile.ood`. | Open (K8s experimental, Q4) |
+| TD-13 | infra-rstudio | RStudio images don't build: `r-cran-bspm`/`python3-bspm` installed before their PPA (c2d4u has no noble build), `sssd-client` is not an Ubuntu package. Vendored: fix in R-studioConf. | Open (P1) |
 
 ---
 

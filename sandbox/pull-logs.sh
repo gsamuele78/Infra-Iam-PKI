@@ -3,6 +3,9 @@
 # Pulls provisioning logs from the Vagrant Guest to the Host.
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v vagrant >/dev/null 2>&1 || { echo "ERROR: required binary 'vagrant' not found in PATH" >&2; exit 1; }
+
 HOST=${1:-rstudio-host}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DST_DIR="$SCRIPT_DIR/logs/$HOST"

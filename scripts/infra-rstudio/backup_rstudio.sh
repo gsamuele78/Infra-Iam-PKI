@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # backup_rstudio.sh
 # Backs up infra-rstudio infrastructure artifacts:
 #   - SSL/PKI certificates
@@ -74,11 +77,9 @@ backup_certs() {
     # Load SSL paths from .env if available
     local env_file="${RSTUDIO_DIR}/.env"
     local ssl_cert=""
-    local ssl_key=""
 
     if [ -f "${env_file}" ]; then
         ssl_cert=$(grep '^SSL_CERT_PATH=' "${env_file}" | cut -d= -f2- | tr -d '"' || true)
-        ssl_key=$(grep '^SSL_KEY_PATH=' "${env_file}" | cut -d= -f2- | tr -d '"' || true)
     fi
 
     # Back up SSL cert (not key — private key should NOT be in backups

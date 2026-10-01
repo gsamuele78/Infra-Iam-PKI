@@ -58,7 +58,7 @@ This design follows the established `infra-iam` Caddy pattern and is documented 
 
 ## Authentication Backend Decision Tree
 
-```
+```text
 Is the host joined to an Active Directory domain?
 ├── YES: Is SSSD already configured on the host?
 │   ├── YES  → Use profile: sssd   (AUTH_BACKEND=sssd)
@@ -67,11 +67,13 @@ Is the host joined to an Active Directory domain?
 ```
 
 **Selecting a backend** is done via `.env`:
+
 ```dotenv
 AUTH_BACKEND=sssd    # or: samba
 ```
 
 And profile activation at deploy time:
+
 ```bash
 docker compose --profile sssd --profile portal up -d
 # or
@@ -82,7 +84,7 @@ docker compose --profile samba --profile portal up -d
 
 ## PKI Trust Chain
 
-```
+```text
 infra-pki (Step-CA)
   └── root_ca.crt (PEM)
         ├── → rstudio-init  (fetches via CA_URL/roots.pem, verifies CA_FINGERPRINT)
@@ -91,6 +93,7 @@ infra-pki (Step-CA)
 ```
 
 Bootstrap sequence:
+
 1. `rstudio-init` starts first (`depends_on` in compose)
 2. It calls `manage_pki_trust.sh CA_URL CA_FINGERPRINT`
 3. Root CA is installed into the system trust store inside the init container
@@ -164,4 +167,3 @@ The final injection step (Backend Proxy Injection to RStudio) requires a `proxy_
 - [CONFIGURATION.md](CONFIGURATION.md) — Complete `.env` variable reference and compose profile system
 - [DEPLOY.md](DEPLOY.md) — Step-by-step deployment guide with prerequisites
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — Diagnostic commands and common failure patterns
-

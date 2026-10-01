@@ -4,6 +4,7 @@ services:
   init-files:
     image: smallstep/step-ca:0.29.0
     container_name: step-ca-init-files
+    restart: "no" # one-shot: dependants wait on service_completed_successfully
     user: root
     entrypoint: /bin/sh
     networks: [ pki-net ]
@@ -111,7 +112,9 @@ services:
       - ./step_data:/home/step
       - ./logs/step-ca:/var/log/step-ca
       - ../scripts/infra-pki/patch_ca_config.sh:/patch_ca_config.sh:ro
-    entrypoint: /bin/bash -c " echo '--- STARTING ENTRYPOINT ---'; if [ ! -f /home/step/config/ca.json ]; then echo 'Initializing PKI...'; /bin/bash /entrypoint.sh echo 'Init complete'; fi; echo 'Patching configuration...'; /bin/bash /patch_ca_config.sh; echo 'Starting Step-CA...'; exec /usr/local/bin/step-ca --password-file=/home/step/secrets/password 2>&1 | tee -a /var/log/step-ca/system.log"
+    # `exec` makes step-ca PID 1 so SIGTERM reaches it (a `| tee` pipeline kept bash
+    # as PID 1 and every stop ended in SIGKILL). Output goes to the json-file driver.
+    entrypoint: /bin/bash -c " echo '--- STARTING ENTRYPOINT ---'; if [ ! -f /home/step/config/ca.json ]; then echo 'Initializing PKI...'; /bin/bash /entrypoint.sh; echo 'Init complete'; fi; echo 'Patching configuration...'; /bin/bash /patch_ca_config.sh; echo 'Starting Step-CA...'; exec /usr/local/bin/step-ca --password-file=/home/step/secrets/password"
     logging: *default-logging
     healthcheck:
       test: [ "CMD", "step", "ca", "health" ]
@@ -191,6 +194,7 @@ services:
 
   fingerprint-writer:
     image: smallstep/step-cli:0.29.0
+    restart: "no" # one-shot: writes the fingerprint and exits
     # Runs as PUID:PGID (non-root). The `init-files` one-shot container pre-creates
     # fingerprint/ with the correct ownership before this service starts, so no root needed.
     user: "${PUID}:${PGID}"
@@ -216,7 +220,14 @@ services:
   watchtower:
     image: containrrr/watchtower:1.7.1
     container_name: pki-watchtower
+    restart: unless-stopped
     networks: [ pki-net ]
+    healthcheck:
+      test: [ "CMD", "/watchtower", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -226,7 +237,6 @@ services:
       - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-
       - ./logs/watchtower:/var/log/watchtower
     command: --interval 86400 --cleanup --label-enable
     logging:

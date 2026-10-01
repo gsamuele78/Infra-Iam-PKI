@@ -26,13 +26,15 @@ scripts/infra-rstudio/validate_rstudio.sh --post-deploy
 ### 1. SSSD Socket Not Found — Container Starts, Auth Fails
 
 **Symptom**: RStudio starts but users cannot log in. `rstudio-sssd` logs show:
-```
+
+```text
 SSSD pipe directory not found: /var/lib/sss/pipes
 ```
 
 **Cause**: SSSD is not running on the host, or `HOST_SSS_PIPES` in `.env` points to the wrong path.
 
 **Resolution**:
+
 ```bash
 # Verify SSSD is running on the host
 systemctl is-active sssd
@@ -55,13 +57,15 @@ docker compose restart rstudio-sssd
 ### 2. PKI Root CA Missing — Nginx TLS Error
 
 **Symptom**: `nginx-portal` container fails to start or is unhealthy. Logs show:
-```
+
+```text
 nginx: [emerg] cannot load certificate "/certs/root_ca.crt": BIO_new_file() failed
 ```
 
 **Cause**: `rstudio-init` failed to download or install the Root CA, or CA_URL/CA_FINGERPRINT not set.
 
 **Resolution**:
+
 ```bash
 # Check init container logs
 docker logs rstudio_init
@@ -88,6 +92,7 @@ docker compose restart nginx-portal
 **Cause**: The default R session opens multiple threads via OpenBLAS. On hosts with many cores, this can create a thread storm that starves other containers or triggers OOM.
 
 **Resolution**:
+
 ```bash
 # Check current thread limits in .env
 grep -E '^(MAX_BLAS|OMP_NUM|OPENBLAS)' infra-rstudio/.env
@@ -107,13 +112,15 @@ docker exec rstudio_pet bash -c 'Rscript -e "library(RhpcBLASctl); blas_get_num_
 ### 4. oauth2-proxy 500 — Missing `oauth2-proxy.cfg`
 
 **Symptom**: Navigating to the portal gives a 500 or redirect loop. `rstudio-oauth2` logs:
-```
+
+```text
 failed to load configuration: no such file or directory: ./config/oauth2-proxy.cfg
 ```
 
 **Cause**: The `oidc` profile was activated but `oauth2-proxy.cfg` was never created.
 
 **Resolution**:
+
 ```bash
 # Create config from template
 cp infra-rstudio/config/oauth2-proxy.cfg.example infra-rstudio/config/oauth2-proxy.cfg
@@ -141,6 +148,7 @@ docker compose restart oauth2-proxy
 **Cause**: `telemetry-api` container is not healthy or `docker-socket-proxy` is not ready.
 
 **Resolution**:
+
 ```bash
 # Check telemetry container status
 docker compose ps rstudio_telemetry rstudio_dsp
@@ -162,13 +170,15 @@ docker compose restart telemetry-api
 ### 6. Winbind / Samba Auth Failures
 
 **Symptom**: Using `samba` profile. Users cannot log in. `rstudio-samba` logs:
-```
+
+```text
 winbind: could not connect to winbindd socket
 ```
 
 **Cause**: Winbind is not running on the host, or socket path in `.env` is wrong.
 
 **Resolution**:
+
 ```bash
 # Check Winbind is running on host
 systemctl is-active winbind
@@ -192,13 +202,15 @@ net ads testjoin    # or: net rpc testjoin
 ### 7. Fingerprint Mismatch — PKI Bootstrapping Fails
 
 **Symptom**: `rstudio-init` fails with:
-```
+
+```text
 FATAL: Fingerprint MISMATCH
 ```
 
 **Cause**: `CA_FINGERPRINT` in `.env` does not match the actual Root CA.
 
 **Resolution**:
+
 ```bash
 # Get the correct fingerprint from PKI host
 curl -sf http://192.168.56.10/fingerprint/root_ca.fingerprint
@@ -279,4 +291,3 @@ docker compose --profile sssd build --no-cache
 ```
 
 > The `c2d4u` PPA and `bspm` binary packages reduce build time from ~1 hour (source compilation) to minutes.
-

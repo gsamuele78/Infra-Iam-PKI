@@ -62,6 +62,7 @@ scripts/infra-rstudio/validate_rstudio.sh --pre-deploy
 ```
 
 This checks:
+
 - Required `.env` variables are set
 - Docker Compose configuration is valid
 - `docker.sock` is present (needed by `docker-socket-proxy`)
@@ -78,6 +79,7 @@ scripts/infra-rstudio/deploy_rstudio.sh
 ```
 
 The script will:
+
 1. Assert dependencies (`docker`, `curl`)
 2. Safe-parse `.env` (never `source` it directly)
 3. Show a confirmation prompt with active backend and domain
@@ -100,6 +102,7 @@ docker compose --profile sssd --profile portal --profile oidc --profile ai up -d
 ```
 
 **Note**: Deploy `oauth2-proxy.cfg` before activating the `oidc` profile:
+
 ```bash
 cp infra-rstudio/config/oauth2-proxy.cfg.example infra-rstudio/config/oauth2-proxy.cfg
 # Edit oauth2-proxy.cfg with real Keycloak client credentials
@@ -186,4 +189,3 @@ scripts/infra-rstudio/reset_rstudio.sh
 1. **Certificate Check** — Verifies existing certs or enrolls new ones via `pki/enroll_cert.sh` if Step-CA integration is configured
 2. **Portal Generation** — Uses `process_template()` to render the Botanical Portal HTML from feature flags in `.env`
 3. **Hardened Config** — Replaces default `nginx.conf` with DDoS-mitigated tuning (limited buffers, coordinated timeouts)
-

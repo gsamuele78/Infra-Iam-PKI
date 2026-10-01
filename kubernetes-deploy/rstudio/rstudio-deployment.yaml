@@ -27,7 +27,7 @@ spec:
       initContainers:
         # 1. Pessimistic Init: Fetch PKI Root for Internal Trust (from Infra-Iam-PKI pattern)
         - name: fetch-pki-certs
-          image: smallstep/step-cli:0.25.2
+          image: smallstep/step-cli:0.29.0
           env:
             - name: STEPPATH
               value: /tmp/step
@@ -97,51 +97,6 @@ spec:
               command: ["wbinfo", "-p"] # Simple ping to winbind daemon
             initialDelaySeconds: 15
             periodSeconds: 20
-
-        # --- OAuth2 Proxy Sidecar (Zero-Trust Auth) ---
-        - name: oauth2-proxy
-          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-          args:
-            - --provider=oidc
-            - --email-domain=*
-            - --upstream=http://127.0.0.1:8787
-            - --http-address=0.0.0.0:4180
-          env:
-            - name: OAUTH2_PROXY_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: rstudio-secrets
-                  key: OIDC_CLIENT_ID
-            - name: OAUTH2_PROXY_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: rstudio-secrets
-                  key: OIDC_CLIENT_SECRET
-            - name: OAUTH2_PROXY_COOKIE_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: rstudio-secrets
-                  key: OAUTH2_COOKIE_SECRET
-            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: rstudio-config
-                  key: OIDC_ISSUER_URL
-          ports:
-            - containerPort: 4180
-              name: proxy-http
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "200m"
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 65532
-            capabilities:
-              drop: ["ALL"]
 
         # --- Main RStudio Application ---
         - name: rstudio

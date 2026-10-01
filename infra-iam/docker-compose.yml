@@ -43,6 +43,12 @@ services:
       POST: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q OK" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -120,24 +126,39 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     entrypoint: /bin/bash
+    # renew_certificate.sh exit codes: 0 = new cert written -> restart Keycloak,
+    # 10 = still valid, anything else = error (logged, retried next cycle; the
+    # healthcheck below turns unhealthy before the cert actually expires).
+    # The check is local and cheap, so it runs hourly: step-ca issues 24h leaf
+    # certs by default and a daily check could miss the renewal window.
     command: >
       -c "
         while true; do
-          echo 'Checking certificates...';
-          if /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key; then
-            echo 'Certificate renewed, restarting Keycloak...';
-            docker restart iam-keycloak;
-          else
-            echo 'No renewal needed or renewal failed.';
-          fi;
-          sleep 86400;
+          rc=0;
+          /scripts/infra-iam/renew_certificate.sh /certs/keycloak.crt /certs/keycloak.key || rc=$$?;
+          case $$rc in
+            0) echo 'New certificate written, restarting Keycloak...'; docker restart iam-keycloak ;;
+            10) ;;
+            *) echo \"ERROR: renew_certificate.sh exited $$rc\" >&2 ;;
+          esac;
+          sleep $${RENEW_CHECK_INTERVAL:-3600};
         done
       "
     environment:
       - STEP_TOKEN_FILE=/run/secrets/step_token
       - CA_URL=${CA_URL}
-      - FINGERPRINT=${FINGERPRINT}
+      - ROOT_CA_FILE=/certs/root_ca.crt
+      - RENEW_EXPIRES_IN=${RENEW_EXPIRES_IN:-33%}
+      - RENEW_CHECK_INTERVAL=${RENEW_CHECK_INTERVAL:-3600}
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
+    healthcheck:
+      # Healthy while the cert exists and has more than 10% of its life left
+      # (needs-renewal exits 1 = "does not need renewal").
+      test: [ "CMD-SHELL", "step certificate needs-renewal /certs/keycloak.crt --expires-in 10% >/dev/null 2>&1; [ $$? -eq 1 ]" ]
+      interval: 5m
+      timeout: 10s
+      retries: 2
+      start_period: 5m
     volumes:
       - ./certs:/certs
       - ../scripts:/scripts:ro
@@ -145,7 +166,7 @@ services:
       iam-init:
         condition: service_completed_successfully
       docker-socket-proxy:
-        condition: service_started
+        condition: service_healthy
     logging: *default-logging
 
   # ------------------------------------------------------------------
@@ -290,6 +311,12 @@ services:
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
       - DOCKER_API_VERSION=1.44
       - WATCHTOWER_NO_RESTART=true
+    healthcheck:
+      test: [ "CMD", "/watchtower", "--health-check" ]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -300,7 +327,7 @@ services:
       - ./logs/watchtower:/var/log/watchtower
     depends_on:
       docker-socket-proxy:
-        condition: service_started
+        condition: service_healthy
     command: --interval 86400 --cleanup --label-enable
     logging: *default-logging
 

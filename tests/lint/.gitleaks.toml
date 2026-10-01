@@ -1,0 +1,16 @@
+# tests/lint/.gitleaks.toml
+title = "Infra-IAM-PKI gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Committed templates and lab-only values (never production secrets)"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)\.env\.sandbox$''',
+  '''(^|/)\.env\.sandbox\.example$''',
+  '''(^|/)[^/]+\.cfg\.example$''',
+  '''^sandbox/''',
+  '''^doc/''',
+]

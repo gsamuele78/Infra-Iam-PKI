@@ -56,7 +56,7 @@ Gemini performs best with structured, clear outputs. For this project:
 
 Before generating ANY code for this project, Gemini MUST verify against this checklist:
 
-```
+```text
 □ Every container has deploy.resources.limits (memory + cpus)
 □ No named Docker volumes — bind mounts only
 □ Scripts begin with set -euo pipefail
@@ -87,7 +87,7 @@ Before generating ANY code for this project, Gemini MUST verify against this che
 | `caddy` | `2.9.1-alpine` | Docker Hub | IAM L7 proxy (stock image) |
 | `caddy` | custom build | Local `infra-pki/caddy/Dockerfile` | PKI L4 proxy (with caddy-l4 plugin) |
 | `watchtower` | `1.7.1` | `containrrr/watchtower` | NOT `nickfedor/watchtower` (that was a bug) |
-| `docker-socket-proxy` | `edge` | `tecnativa/docker-socket-proxy` | Minimal API surface |
+| `docker-socket-proxy` | `0.3.0` | `tecnativa/docker-socket-proxy` | Minimal API surface |
 | Open OnDemand | `4.1.0` | `apt.osc.edu` (deb packages) | Built from `Dockerfile.ood` — NO Docker Hub image exists |
 | `oauth2-proxy` | `v7.6.0` | `quay.io/oauth2-proxy/oauth2-proxy` | RStudio OIDC auth gate |
 
@@ -99,7 +99,7 @@ Gemini should use this to validate `depends_on` chains and understand startup or
 
 ### PKI Stack
 
-```
+```text
 init-files ──(completed)──► postgres ──(healthy)──► step-ca ──(healthy)──► configurator
                                                        │                       │
                                                        ├──(healthy)──► caddy   │
@@ -111,7 +111,7 @@ init-files ──(completed)──► postgres ──(healthy)──► step-ca 
 
 ### IAM Stack
 
-```
+```text
 iam-init ──(completed)──► iam-db ──(healthy)──► iam-keycloak
     │                                                │
     ├──(completed)──► iam-renewer                     │
@@ -123,7 +123,7 @@ iam-init ──(completed)──► iam-db ──(healthy)──► iam-keycloak
 
 ### Sandbox Cross-Host
 
-```
+```text
 pki-host ──(fingerprint available via HTTP :80)──► iam-host
                                                   │
 pki-host ──(fingerprint available via HTTP :80)──► ood-host
@@ -216,7 +216,7 @@ When scripts run health checks from the host, traffic routes through the Docker 
 
 Scripts have hidden dependencies. Modifying one without checking its callers/consumers will break workflows:
 
-```
+```text
 generate_token.sh → produces → {host}_join_pki.env → consumed by → configure_iam_pki.sh
 configure_iam_pki.sh → modifies → infra-iam/.env → read by → deploy_iam.sh
 deploy_iam.sh → calls → validate_iam_config.sh (pre + post)
@@ -283,7 +283,7 @@ When generating sandbox-related code:
 
 When asked to modify a file, follow this tree:
 
-```
+```text
 Is it a docker-compose.yml?
 ├── YES → Include FULL service block with deploy, healthcheck, logging, labels, depends_on
 │         → Verify all constraints from Section 2 checklist

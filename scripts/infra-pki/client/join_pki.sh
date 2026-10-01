@@ -314,6 +314,7 @@ verify_cert() {
         
         # Download the SSH Host CA Key
         TEMP_KEY=$(mktemp)
+        trap 'rm -f "${TEMP_KEY:-}"' EXIT
         if curl -s -f "$SSH_KEY_URL" -o "$TEMP_KEY"; then
              # Get Expected Fingerprint (SHA256:...)
              EXPECTED_FP=$(ssh-keygen -l -f "$TEMP_KEY" | awk '{print $2}')
