@@ -8,6 +8,12 @@ the 3.x → 4.x releases is
 
 ## [Unreleased]
 
+### Fixed
+
+- RStudio images build again (TD-13): synced R-studioConf `47441c5`, which drops
+  bspm/the c2d4u PPA and `sssd-client` from the docker tier (its TD-T2-05). Its monster
+  build now passes for `rstudio-sssd`, `rstudio-samba` and `ollama-ai`.
+
 ### Security
 
 - History purged and force-pushed (2026-10-01, decision Q1): the `.env` files,
