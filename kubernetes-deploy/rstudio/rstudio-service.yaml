@@ -9,5 +9,5 @@ spec:
   ports:
     - protocol: TCP
       port: 8787
-      targetPort: 4180
+      targetPort: 8787
   type: ClusterIP

@@ -1,0 +1,31 @@
+# .github/workflows/rstudio-vendor-check.yml
+# Vendored RStudio trees must equal R-studioConf at the commit pinned in
+# infra-rstudio/UPSTREAM.lock. A local edit fails here: fix it in R-studioConf,
+# then let rstudio-upstream-sync (or `sync_rstudioconf.sh --update`) bring it in.
+name: rstudio-vendor-check
+
+on:
+  push:
+    paths:
+      - "infra-rstudio/**"
+      - "kubernetes-deploy/rstudio/**"
+      - "scripts/infra-rstudio/**"
+      - ".github/workflows/rstudio-vendor-check.yml"
+  pull_request:
+    paths:
+      - "infra-rstudio/**"
+      - "kubernetes-deploy/rstudio/**"
+      - "scripts/infra-rstudio/**"
+      - ".github/workflows/rstudio-vendor-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  vendor-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Vendored trees match the pinned R-studioConf commit
+        run: scripts/infra-rstudio/sync_rstudioconf.sh --check

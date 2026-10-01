@@ -88,6 +88,36 @@ the 3.x → 4.x releases is
   10 still valid, 2 cert/key missing, 1 error, and it needs the root CA
   (`ROOT_CA_FILE`, default `root_ca.crt` next to the certificate).
 
+### Phase R: RStudio vendored from R-studioConf
+
+#### Changed
+
+- **RStudio is vendored from R-studioConf.** `infra-rstudio/`, `kubernetes-deploy/rstudio/`
+  and 14 T1 host tools in `scripts/infra-rstudio/` are byte-identical copies of
+  R-studioConf at the commit in `infra-rstudio/UPSTREAM.lock`. Fix RStudio code in
+  R-studioConf; `scripts/infra-rstudio/sync_rstudioconf.sh --update` (or the weekly
+  `rstudio-upstream-sync` PR) brings it here, `--check` (CI: `rstudio-vendor-check`)
+  rejects hand edits. Locally owned: `.env.example`, `.env.sandbox`, `UPSTREAM.lock`
+  and the `deploy/backup/reset/validate/configure_*_rstudio*.sh` operator scripts.
+- First sync brings: docker-socket-proxy on a loopback-only bridge (was on the host
+  network, Docker API reachable from the LAN), healthchecks for it and oauth2-proxy
+  (`v7.6.0-alpine`), K8s NetworkPolicies, K8s images pinned (`latest` → `v1.0.0`),
+  a valid `telemetry-api-deployment.yaml`; drops 47 unused portal images and the
+  T1-only `config/*.vars.conf` and orphan-report templates from `infra-rstudio/`.
+
+#### Security
+
+- Untracked 6 `infra-rstudio/config/` files holding real e-mail addresses and AD
+  settings; `purge_git_history.sh` removes them from history and redacts the 4 real
+  values left in old revisions of `setup_nodes.vars.conf`.
+
+#### Upgrade from 3.1.0 (RStudio host)
+
+- Move the site files into the overlay before redeploying:
+  `mkdir -p infra-rstudio/config/site && mv infra-rstudio/config/admin_recipients.txt infra-rstudio/config/site/`
+  (the telemetry container now bind-mounts it; `deploy_rstudio.sh` stops if it is missing).
+- Set `IMAGE_TAG` in `infra-rstudio/.env` (the compose file no longer defaults it).
+
 ## [3.1.0] - 2026-10-01
 
 Baseline release: the first tagged state of the repo, after the
