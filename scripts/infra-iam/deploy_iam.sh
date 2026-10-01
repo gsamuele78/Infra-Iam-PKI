@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # deploy_iam.sh
 # Deployment script per Infra-IAM: crea filesystem, imposta permessi, avvia lo stack.
 # Location: scripts/infra-iam/deploy_iam.sh

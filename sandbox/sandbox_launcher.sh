@@ -2,7 +2,10 @@
 # Sandbox testing launcher
 # Simulates cross-host network communication using a shared Docker bridge network.
 
-set -e
+set -euo pipefail
+
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 

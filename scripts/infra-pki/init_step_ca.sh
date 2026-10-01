@@ -37,7 +37,8 @@ export STEP_CA_URL="https://step-ca:9000"
 get_admin_provisioner_name() {
     # Try to read from ca.json if it exists (for file-based setups)
     if command -v jq &> /dev/null && [ -f /home/step/config/ca.json ]; then
-        local name=$(jq -r '.authority.provisioners[]? | select(.type=="JWK") | .name' /home/step/config/ca.json 2>/dev/null | head -n 1)
+        local name
+        name=$(jq -r '.authority.provisioners[]? | select(.type=="JWK") | .name' /home/step/config/ca.json 2>/dev/null | head -n 1)
         if [ -n "$name" ] && [ "$name" != "null" ]; then
             echo "$name"
             return
@@ -71,7 +72,6 @@ add_provisioner() {
     local name=$1
     local type=$2
     shift 2
-    local args="$@"
     
     # Check if provisioner exists
     if step ca provisioner list \
@@ -82,7 +82,7 @@ add_provisioner() {
     fi
     
     echo "Adding provisioner '$name' ($type)..."
-    step ca provisioner add "$name" --type "$type" $args \
+    step ca provisioner add "$name" --type "$type" "$@" \
         --admin-subject="step" \
         --admin-provisioner="$ADMIN_PROVISIONER_NAME" \
         --admin-password-file="$STEP_CA_PASSWORD_FILE" \

@@ -95,6 +95,16 @@ fi
 
 mkdir -p "$CERT_DIR"
 
+# --- 2b. Root CA, verified against FINGERPRINT --------------------------------
+# 'step ca token' and 'step ca certificate' have no --fingerprint flag: they
+# trust whatever --root names, so the root is fetched (and checked) first.
+docker run --rm \
+    --network host \
+    -v "$CERT_DIR":/home/step \
+    --user "$(id -u):$(id -g)" \
+    smallstep/step-cli:0.29.0 \
+    step ca root /home/step/root_ca.crt --ca-url "$CA_URL" --fingerprint "$FINGERPRINT" --force
+
 # --- 3. Authentication (OTT) ---
 echo "Generating One-Time Token (OTT)..."
 if [ -z "$CA_PASSWORD" ]; then
@@ -119,8 +129,10 @@ printf '%s' "$CA_PASSWORD" > "$PASS_FILE"
 TOKEN=$(docker run --rm \
     --network host \
     -v "$PASS_FILE":/run/secrets/ca_password:ro \
+    -v "$CERT_DIR/root_ca.crt":/run/step-root/root_ca.crt:ro \
     smallstep/step-cli:0.29.0 \
-    step ca token "$HOSTNAME" --ca-url "$CA_URL" --root /dev/null --password-file /run/secrets/ca_password --provisioner "$PROVISIONER")
+    step ca token "$HOSTNAME" --ca-url "$CA_URL" --root /run/step-root/root_ca.crt \
+        --password-file /run/secrets/ca_password --provisioner "$PROVISIONER")
 
 echo "Requesting certificate for $HOSTNAME (SANs: $SANS)..."
 
@@ -128,12 +140,12 @@ echo "Requesting certificate for $HOSTNAME (SANs: $SANS)..."
 docker run --rm \
     --network host \
     -v "$CERT_DIR":/home/step \
-    --user $(id -u):$(id -g) \
+    --user "$(id -u):$(id -g)" \
     smallstep/step-cli:0.29.0 \
     step ca certificate "$HOSTNAME" /home/step/$HOSTNAME.crt /home/step/$HOSTNAME.key \
     --san "$SANS" \
     --token "$TOKEN" \
     --ca-url "$CA_URL" \
-    --fingerprint "$FINGERPRINT"
+    --root /home/step/root_ca.crt
 
 echo "Done. Certificates saved in $CERT_DIR"

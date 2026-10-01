@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+for _bin in vagrant curl mktemp; do
+    command -v "$_bin" >/dev/null 2>&1 || { echo "ERROR: required binary '$_bin' not found in PATH" >&2; exit 1; }
+done
+
 # End-to-End SSO Test for Infra-Iam-PKI Sandbox
 # This script simulates a non-optimistic authentication flow directly from the host.
 # It proves that OOD properly delegates to Keycloak, and that Keycloak successfully
@@ -9,6 +14,7 @@ set -euo pipefail
 # implicitly via Keycloak without requiring a second login form.
 
 OOD_IP="192.168.56.30"
+# shellcheck disable=SC2034 # topology reference, kept next to its siblings
 IAM_IP="192.168.56.20"
 RSTUDIO_IP="192.168.56.40"
 
@@ -55,6 +61,7 @@ echo "  -> Ensuring POSIX user '$TEST_USER' exists in ood-portal container..."
 vagrant ssh ood-host -c "sudo docker exec ood-portal id -u $TEST_USER &>/dev/null || sudo docker exec ood-portal useradd -m -s /bin/bash $TEST_USER" > /dev/null
 
 COOKIE_JAR=$(mktemp)
+trap 'rm -f "$COOKIE_JAR" /tmp/login_url.txt /tmp/rstudio_login_url.txt' EXIT
 
 # ---------------------------------------------------------
 # Step 2: Access OOD and get the Keycloak Login Redirect

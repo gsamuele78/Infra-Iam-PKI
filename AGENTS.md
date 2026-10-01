@@ -29,6 +29,7 @@ stack per host. Kubernetes manifests exist but are experimental.
 ## Rules
 
 Hard rules (from `.ai/project.yml`; `.ai/validate.sh` enforces them):
+
 1. Every container MUST have deploy.resources.limits for both memory and cpus
 2. BIND MOUNTS only — zero named Docker volumes
 3. All scripts MUST begin with set -euo pipefail
@@ -43,7 +44,6 @@ Hard rules (from `.ai/project.yml`; `.ai/validate.sh` enforces them):
 12. Use jq for JSON manipulation — never sed/awk on JSON
 13. Scripts MUST explicitly assert that required external binaries (jq, curl, openssl, etc) are present using `command -v`
 14. Scripts MUST use `trap` to clean up temporary files or state on EXIT/ERR
-
 
 - Never edit a vendored RStudio file (`infra-rstudio/`, `kubernetes-deploy/rstudio/`,
   the files listed in `infra-rstudio/UPSTREAM.lock`). Fix it in R-studioConf, then
