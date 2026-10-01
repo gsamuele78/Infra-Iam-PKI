@@ -8,6 +8,11 @@ the 3.x → 4.x releases is
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-10-01
+
+Phases 1, 2, 3 and R of `doc/plan/ALIGNMENT-PLAN.md`, released together: they only
+pass CI as a set (Q17), so 3.2.0 and 3.3.0 were never tagged.
+
 ### Phase 1: governance files, Makefile, AGENTS.md
 
 #### Added
