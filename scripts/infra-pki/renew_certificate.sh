@@ -37,7 +37,7 @@ else
 fi
 ROOT_CA_FILE="${ROOT_CA_FILE:-$(dirname "$CRT_FILE")/root_ca.crt}"
 RENEW_EXPIRES_IN="${RENEW_EXPIRES_IN:-33%}"
-STEP_CLI_IMAGE="smallstep/step-cli:0.29.0"
+STEP_CLI_IMAGE="smallstep/step-cli:0.31.0"
 
 if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
     echo "Warning: Certificate or Key file not found ($CRT_FILE). Skipping."

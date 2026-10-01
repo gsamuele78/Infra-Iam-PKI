@@ -7,7 +7,7 @@ services:
   # --- 1. Docker Socket Proxy for Telemetry ---
   # Pessimistic Isolation: Never mount /var/run/docker.sock directly into telemetry.
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: tecnativa/docker-socket-proxy:v0.5.0
     container_name: rstudio_socket_proxy
     restart: unless-stopped
     network_mode: "host"

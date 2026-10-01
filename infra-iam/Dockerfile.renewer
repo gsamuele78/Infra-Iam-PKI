@@ -1,4 +1,4 @@
-FROM smallstep/step-cli:0.29.0
+FROM smallstep/step-cli:0.31.0
 
 USER root
 

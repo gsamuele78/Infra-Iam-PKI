@@ -46,7 +46,7 @@ spec:
 
       # 2. Extract internal certificates dynamically from PKI API instead of generic volumes
       - name: fetch-pki-certs
-        image: smallstep/step-cli:0.29.0
+        image: smallstep/step-cli:0.31.0
         env:
         - name: STEPPATH
           value: /tmp/step

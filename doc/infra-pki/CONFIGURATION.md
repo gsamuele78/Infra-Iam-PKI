@@ -30,7 +30,7 @@ We utilize a split provisioner strategy for SSH Hosts aka "Best Practice":
 
 ### 1.3 Dynamic Configuration Patching
 
-To support complex passwords and PostgreSQL connection requirements that are not natively handled by the `step-ca` 0.29.0 initialization:
+To support complex passwords and PostgreSQL connection requirements that are not natively handled by the `step-ca` initialization:
 
 * **Script**: `scripts/infra-pki/patch_ca_config.sh`
 * **Execution**: Runs as a pre-start step in the `step-ca` container (entrypoint override).

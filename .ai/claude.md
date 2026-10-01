@@ -54,7 +54,7 @@ Use this XML-structured context when working with Claude API or Claude Projects:
   
   <components>
     <component name="infra-pki" role="Certificate Authority">
-      <tech>step-ca 0.29.0 + PostgreSQL 15 + Caddy L4</tech>
+      <tech>step-ca 0.30.2 + PostgreSQL 15 + Caddy L4</tech>
       <network>pki-net (isolated Docker bridge)</network>
       <ports>9000 (CA API via Caddy), 80 (public certs/fingerprint)</ports>
     </component>
@@ -95,8 +95,8 @@ Use this XML-structured context when working with Claude API or Claude Projects:
   </hard_constraints>
   
   <image_versions>
-    <image name="step-ca" version="0.29.0" />
-    <image name="step-cli" version="0.29.0" />
+    <image name="step-ca" version="0.30.2" />
+    <image name="step-cli" version="0.31.0" />
     <image name="postgres" version="15-alpine" />
     <image name="keycloak" version="26.0.7" registry="quay.io/keycloak" />
     <image name="caddy" version="2.9.1-alpine" />
@@ -270,7 +270,7 @@ When creating artifacts (React components, HTML, diagrams) for this project:
 
 Key facts Claude should retain across conversation turns:
 
-- **step-ca version: 0.29.0** (not 0.25.2 — that's the outdated K8s manifest)
+- **step-ca version: 0.30.2** (not 0.25.2 — that's the outdated K8s manifest)
 - **Keycloak version: 26.0.7** (not 23.0 — that's the outdated K8s manifest)
 - **OOD source: Ubuntu Noble 24.04 deb from apt.osc.edu** (NOT Docker Hub `osc/ondemand` — that image doesn't exist)
 - **Caddy L4 = TCP proxy for PKI (port 9000)** / **Caddy L7 = HTTP reverse proxy for IAM**

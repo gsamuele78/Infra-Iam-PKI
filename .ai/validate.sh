@@ -258,7 +258,7 @@ for f in $DOCKERFILES; do
         fi
         if [[ "$ref" != *:* ]] || [[ "$tag" == "latest" ]] || [[ "$tag" == "builder" ]] || [[ "$tag" == */* ]]; then
             fail "$rel_path → FROM '$ref' is not pinned to a version"
-            hint "Use an explicit version tag, e.g. caddy:2.9.1-builder-alpine"
+            hint "Use an explicit version tag, e.g. caddy:2.11.4-builder-alpine"
         fi
     done < <(grep -iE '^\s*FROM\s' "$f" | awk '{for(i=2;i<=NF;i++) if($i !~ /^--/){print $i; break}}')
 done

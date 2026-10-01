@@ -226,7 +226,7 @@ fi
 # Check 9: Image availability
 echo ""
 echo "Checking Docker images..."
-REQUIRED_IMAGES=("smallstep/step-ca:0.29.0" "smallstep/step-cli:0.29.0" "postgres:15-alpine")
+REQUIRED_IMAGES=("smallstep/step-ca:0.30.2" "smallstep/step-cli:0.31.0" "postgres:15-alpine")
 
 for image in "${REQUIRED_IMAGES[@]}"; do
     if docker images | grep -q "${image%:*}" | grep -q "${image#*:}"; then
