@@ -87,7 +87,7 @@ Before generating ANY code for this project, Gemini MUST verify against this che
 | `caddy` | `2.9.1-alpine` | Docker Hub | IAM L7 proxy (stock image) |
 | `caddy` | custom build | Local `infra-pki/caddy/Dockerfile` | PKI L4 proxy (with caddy-l4 plugin) |
 | `watchtower` | `1.7.1` | `containrrr/watchtower` | NOT `nickfedor/watchtower` (that was a bug) |
-| `docker-socket-proxy` | `edge` | `tecnativa/docker-socket-proxy` | Minimal API surface |
+| `docker-socket-proxy` | `0.3.0` | `tecnativa/docker-socket-proxy` | Minimal API surface |
 | Open OnDemand | `4.1.0` | `apt.osc.edu` (deb packages) | Built from `Dockerfile.ood` — NO Docker Hub image exists |
 | `oauth2-proxy` | `v7.6.0` | `quay.io/oauth2-proxy/oauth2-proxy` | RStudio OIDC auth gate |
 

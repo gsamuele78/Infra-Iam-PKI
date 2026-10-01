@@ -66,7 +66,7 @@ COMPOSE FORMAT:
 PINNED VERSIONS (do not change):
 - step-ca: 0.29.0 | step-cli: 0.29.0 | postgres: 15-alpine
 - keycloak: 26.0.7 (quay.io) | caddy: 2.9.1-alpine
-- watchtower: 1.7.1 (containrrr) | docker-socket-proxy: edge (tecnativa)
+- watchtower: 1.7.1 (containrrr) | docker-socket-proxy: 0.3.0 (tecnativa)
 - oauth2-proxy: v7.6.0 (quay.io/oauth2-proxy)
 - OOD: built from Dockerfile.ood using Ubuntu Noble 24.04 debs (apt.osc.edu)
 
