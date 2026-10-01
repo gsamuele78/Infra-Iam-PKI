@@ -56,7 +56,7 @@ Gemini performs best with structured, clear outputs. For this project:
 
 Before generating ANY code for this project, Gemini MUST verify against this checklist:
 
-```
+```text
 □ Every container has deploy.resources.limits (memory + cpus)
 □ No named Docker volumes — bind mounts only
 □ Scripts begin with set -euo pipefail
@@ -99,7 +99,7 @@ Gemini should use this to validate `depends_on` chains and understand startup or
 
 ### PKI Stack
 
-```
+```text
 init-files ──(completed)──► postgres ──(healthy)──► step-ca ──(healthy)──► configurator
                                                        │                       │
                                                        ├──(healthy)──► caddy   │
@@ -111,7 +111,7 @@ init-files ──(completed)──► postgres ──(healthy)──► step-ca 
 
 ### IAM Stack
 
-```
+```text
 iam-init ──(completed)──► iam-db ──(healthy)──► iam-keycloak
     │                                                │
     ├──(completed)──► iam-renewer                     │
@@ -123,7 +123,7 @@ iam-init ──(completed)──► iam-db ──(healthy)──► iam-keycloak
 
 ### Sandbox Cross-Host
 
-```
+```text
 pki-host ──(fingerprint available via HTTP :80)──► iam-host
                                                   │
 pki-host ──(fingerprint available via HTTP :80)──► ood-host
@@ -216,7 +216,7 @@ When scripts run health checks from the host, traffic routes through the Docker 
 
 Scripts have hidden dependencies. Modifying one without checking its callers/consumers will break workflows:
 
-```
+```text
 generate_token.sh → produces → {host}_join_pki.env → consumed by → configure_iam_pki.sh
 configure_iam_pki.sh → modifies → infra-iam/.env → read by → deploy_iam.sh
 deploy_iam.sh → calls → validate_iam_config.sh (pre + post)
@@ -283,7 +283,7 @@ When generating sandbox-related code:
 
 When asked to modify a file, follow this tree:
 
-```
+```text
 Is it a docker-compose.yml?
 ├── YES → Include FULL service block with deploy, healthcheck, logging, labels, depends_on
 │         → Verify all constraints from Section 2 checklist

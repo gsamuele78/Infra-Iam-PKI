@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # reset_ood.sh
 # Purpose: Completely reset the Infra-OOD environment (Stop containers & Wipe Data)
 # Location: scripts/infra-ood/reset_ood.sh

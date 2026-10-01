@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # reset_iam.sh
 # Reset completo dell'ambiente Infra-IAM: ferma i container e cancella tutti i dati.
 # Location: scripts/infra-iam/reset_iam.sh

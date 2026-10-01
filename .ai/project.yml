@@ -143,7 +143,6 @@ script_categories:
       - "infra-rstudio/scripts/entrypoint_nginx.sh"
       - "infra-rstudio/scripts/entrypoint_auth_pet.sh"
       - "infra-rstudio/scripts/manage_pki_trust.sh"
-      - "infra-rstudio/scripts/docker-entrypoint.sh"
       - "infra-rstudio/scripts/maintenance_entrypoint.sh"
 
   operator_interactive:
@@ -193,6 +192,7 @@ known_issues:
     severity: "P1"
     component: "infra-iam"
     issue: "renew_certificate.sh restarts Keycloak on EVERY 24h loop iteration, not only when renewal actually happened."
+    status: "fixed in 3.4.0 (renewer: needs-renewal + exit codes, restart only on a new cert, --root instead of the invalid --fingerprint)"
 
   - id: "TD-04"
     severity: "P1"
@@ -204,11 +204,13 @@ known_issues:
     severity: "P3"
     component: "infra-pki"
     issue: "patch_ca_config.sh runs on EVERY container start, even when ca.json is already correct. Idempotent but noisy."
+    status: "verified: exits early when ca.json already uses PostgreSQL (one log line per start); kept by design"
 
   - id: "TD-06"
     severity: "P2"
     component: "infra-ood"
     issue: "Dockerfile.ood pulls ondemand-release-web_4.1.0 — no version pinning for the main ondemand package."
+    status: "fixed in 53ae12f (apt pin ondemand=4.1.*)"
 
   - id: "TD-07"
     severity: "P2"
@@ -220,7 +222,7 @@ known_issues:
     severity: "P2"
     component: "kubernetes"
     issue: "step-cli pinned to 0.25.2 in K8s (03-ood, and the vendored rstudio manifests) but 0.29.0 in Docker compose. step-ca itself is 0.29.0 since 53ae12f."
-    status: "open (rstudio part is fixed in R-studioConf, arrives via the sync)"
+    status: "fixed: every K8s step-cli is 0.29.0 (rstudio part in R-studioConf 32a99b8, vendored)"
 
   - id: "TD-09"
     severity: "P3"
@@ -238,6 +240,10 @@ known_issues:
     component: "root"
     issue: "P0-FIXES.sh and ALL-FIXES.sh were stale one-shot audit scripts."
     status: "fixed in 3.1.0 (scripts/legacy/ removed)"
+  - id: "TD-12"
+    severity: "P3"
+    component: "kubernetes"
+    issue: "03-ood/ood-deployment.yaml runs osc/ondemand:3.1.0 (never published) with RHEL commands (update-ca-trust, httpd); the compose stack builds an Ubuntu image from infra-ood/Dockerfile.ood. K8s is experimental (Q4): needs the Dockerfile.ood image pushed to a registry and Ubuntu commands."
 
 # ──────────────────────────────────────────────────────────────
 # BRANDING

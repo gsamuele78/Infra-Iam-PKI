@@ -121,7 +121,7 @@ Use this XML-structured context when working with Claude API or Claude Projects:
 
 ### Template 1: Modifying a Docker Compose Service
 
-```
+```text
 I need to modify the {service_name} service in {stack}/docker-compose.yml.
 
 Change requested: {description}
@@ -137,7 +137,7 @@ Before you write any code:
 
 ### Template 2: Writing a New Script
 
-```
+```text
 Create a new script: scripts/{path}/{name}.sh
 
 Purpose: {description}
@@ -153,7 +153,7 @@ Requirements:
 
 ### Template 3: Debugging a Container Issue
 
-```
+```text
 Container {name} is {symptom}.
 
 Stack: {pki|iam|ood}
@@ -169,7 +169,7 @@ Before suggesting fixes:
 
 ### Template 4: Security Audit Review
 
-```
+```text
 Review the following file for security issues against the project's Pessimistic System Engineering constraints:
 
 {file_content}

@@ -51,6 +51,43 @@ the 3.x → 4.x releases is
 - shellcheck warnings in the operator scripts (D9), markdownlint and yamllint findings
   in the docs and K8s manifests, `wget -nv` in `Dockerfile.ood`.
 
+### Phase 3: constraint compliance in the product
+
+#### Fixed
+
+- **Certificate renewal never worked.** `step ca renew` and `step ca certificate`
+  have no `--fingerprint` flag; the IAM renewer passed it and sent the error to
+  `/dev/null`, so every renewal and every first enrollment failed silently, and
+  Keycloak was restarted every 24 h anyway (TD-03). The renewer now trusts the
+  fingerprint-verified `/certs/root_ca.crt` via `--root`, checks
+  `step certificate needs-renewal` first, exits 0 (new cert) / 10 (still valid) / 1
+  (error), restarts Keycloak only on 0, checks hourly (step-ca issues 24 h certs by
+  default) and has a healthcheck. Same fix in `scripts/infra-pki/renew_certificate.sh`
+  and `get_certificate.sh` (whose token call used `--root /dev/null`).
+- `infra-pki/caddy/Dockerfile` pinned: `caddy:2.11.4-builder-alpine` and
+  `caddy:2.11.4-alpine` with `caddy-l4 v0.1.2` (was `caddy:builder` + `caddy:latest`
+  and an unpinned plugin). caddy-l4 releases require caddy 2.11, hence not 2.9.1 (D4).
+- step-ca runs as PID 1: the entrypoint piped `exec step-ca` into `tee`, so bash
+  stayed PID 1 and every stop ended in SIGKILL (D18).
+- Healthchecks for docker-socket-proxy, both watchtowers, iam-renewer and ood-portal;
+  `restart:` for the PKI watchtower and the one-shot init services (D10, D22).
+- `Dockerfile.keycloak` defaults `KC_VERSION` to `26.0.7`, as compose passes (D13).
+- Scripts: `command -v` checks for the host binaries (rule 13), `trap` cleanup of
+  temp files, including the provisioner password copied into the step-ca container
+  by `generate_token.sh` (rule 14).
+- `infra-ood/.env.example` added. Known issues re-checked: TD-03, TD-06, TD-08 fixed,
+  TD-05 by design, TD-12 opened (K8s OOD manifest uses an image that was never published).
+
+#### Upgrade from 3.1.0
+
+- PKI host: rebuild Caddy (`docker compose build caddy && docker compose up -d caddy`).
+  step-ca output is no longer copied to `logs/step-ca/system.log`: use `docker logs step-ca`.
+- IAM host: `docker compose up -d` recreates iam-renewer; `RENEW_EXPIRES_IN` and
+  `RENEW_CHECK_INTERVAL` are optional. It needs `certs/root_ca.crt`, which iam-init writes.
+- Callers of `scripts/infra-pki/renew_certificate.sh`: exit codes are now 0 renewed,
+  10 still valid, 2 cert/key missing, 1 error, and it needs the root CA
+  (`ROOT_CA_FILE`, default `root_ca.crt` next to the certificate).
+
 ## [3.1.0] - 2026-10-01
 
 Baseline release: the first tagged state of the repo, after the

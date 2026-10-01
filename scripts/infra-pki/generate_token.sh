@@ -1,5 +1,10 @@
 #!/bin/bash
 set -euo pipefail
+
+# Rule 13: fail fast if a required host binary is missing.
+for _bin in docker mktemp; do
+    command -v "$_bin" >/dev/null 2>&1 || { echo "ERROR: required binary '$_bin' not found in PATH" >&2; exit 1; }
+done
 #
 # generate_token.sh
 # Run this on the CA server (infra-pki) to generate a standardized enrollment token.
@@ -80,7 +85,8 @@ echo "Select Token Type:"
 echo "1. SSH Host (authorize host for SSH)"
 # echo "2. User (authorize user for SSH - Future)"
 echo ""
-read -p "Choice [1]: " TYPE
+# Only SSH host tokens exist today; the prompt is kept for the future user-token type.
+read -r -p "Choice [1]: " _
 
 # --- Auto-Detect SSH Provisioner ---
 echo "Detecting SSH Provisioner..."
@@ -117,6 +123,7 @@ echo "Generating token for '$HOSTNAME'..."
 # Docker approach:
 # Create a temporary file for the password to ensure security
 PW_FILE=$(mktemp)
+trap 'rm -f "$PW_FILE"' EXIT
 chmod 600 "$PW_FILE"
 printf "%s" "$SSH_PASSWORD" > "$PW_FILE"
 
@@ -129,6 +136,8 @@ PGID=${PGID:-1000}
 # Copy password to container to avoid stdin/TTY issues
 # Use a unique temp filename to avoid collisions
 CONTAINER_PW_FILE="/home/step/temp_token_pw_$(date +%s)"
+# The password must not outlive a failed run, on the host or inside step-ca.
+trap 'rm -f "$PW_FILE"; docker exec step-ca rm -f "$CONTAINER_PW_FILE" >/dev/null 2>&1 || true' EXIT
 docker cp "$PW_FILE" "step-ca:$CONTAINER_PW_FILE"
 docker exec -u 0 step-ca chown ${PUID}:${PGID} "$CONTAINER_PW_FILE"
 

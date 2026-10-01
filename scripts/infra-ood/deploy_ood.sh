@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Rule 13: fail fast if a required host binary is missing.
+command -v docker >/dev/null 2>&1 || { echo "ERROR: required binary 'docker' not found in PATH" >&2; exit 1; }
+
 # deploy_ood.sh
 # Comprehensive deployment script for Infra-OOD
 # Location: scripts/infra-ood/deploy_ood.sh
@@ -12,6 +15,7 @@ OOD_DIR="$(cd "$SCRIPT_DIR/../../infra-ood" && pwd)"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+# shellcheck disable=SC2034 # standard colour set
 YELLOW='\033[1;33m'
 NC='\033[0m'
 

@@ -1,6 +1,6 @@
 # Dockerfile.keycloak
 # Runs 'kc.sh build' so 'start --optimized' works correctly (PERF-001 fix)
-ARG KC_VERSION=25.0.0
+ARG KC_VERSION=26.0.7
 FROM quay.io/keycloak/keycloak:${KC_VERSION} AS builder
 
 ENV KC_DB=postgres
