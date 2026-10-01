@@ -7,7 +7,7 @@
 # This image uses an Ubuntu Noble base that supports systemd inside Docker
 # when run with --privileged and /sys/fs/cgroup mounted.
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
