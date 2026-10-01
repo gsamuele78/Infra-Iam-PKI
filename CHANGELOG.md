@@ -13,7 +13,7 @@ the 3.x → 4.x releases is
 Phases 1, 2, 3 and R of `doc/plan/ALIGNMENT-PLAN.md`, released together: they only
 pass CI as a set (Q17), so 3.2.0 and 3.3.0 were never tagged.
 
-#### Known issues
+### Known issues
 
 - Every upstream image carries fixable HIGH/CRITICAL CVEs (first `security-scan` run,
   per image, fixable only): watchtower 1.7.1 (unmaintained upstream), caddy 2.9.1
