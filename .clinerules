@@ -614,6 +614,7 @@ These are documented bugs or incomplete areas. Do NOT "fix" them without explici
 | TD-08 | kubernetes | step-ca image pinned to `0.25.2` in K8s but `0.29.0` in Docker compose. | Fixed: every K8s step-cli is `0.29.0` (rstudio part in R-studioConf `32a99b8`, vendored) |
 | TD-09 | sandbox | `full_sandbox_launcher.sh` has dangling `EOF` and references non-existent `docker-compose.sandbox.yml`. | Fixed in `53ae12f`: script removed |
 | TD-12 | kubernetes | `03-ood/ood-deployment.yaml` runs `osc/ondemand:3.1.0` (never published) with RHEL commands; compose builds an Ubuntu image from `Dockerfile.ood`. | Open (K8s experimental, Q4) |
+| TD-13 | infra-rstudio | RStudio images don't build: `r-cran-bspm`/`python3-bspm` installed before their PPA (c2d4u has no noble build), `sssd-client` is not an Ubuntu package. Vendored: fix in R-studioConf. | Open (P1) |
 
 ---
 

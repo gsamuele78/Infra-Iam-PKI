@@ -244,6 +244,10 @@ known_issues:
     severity: "P3"
     component: "kubernetes"
     issue: "03-ood/ood-deployment.yaml runs osc/ondemand:3.1.0 (never published) with RHEL commands (update-ca-trust, httpd); the compose stack builds an Ubuntu image from infra-ood/Dockerfile.ood. K8s is experimental (Q4): needs the Dockerfile.ood image pushed to a registry and Ubuntu commands."
+  - id: "TD-13"
+    severity: "P1"
+    component: "infra-rstudio"
+    issue: "RStudio images don't build (vendored from R-studioConf): Dockerfile.sssd/samba install r-cran-bspm/python3-bspm before adding the c2d4u PPA (no noble build), and sssd-client is not an Ubuntu package. Fix in R-studioConf."
 
 # ──────────────────────────────────────────────────────────────
 # BRANDING

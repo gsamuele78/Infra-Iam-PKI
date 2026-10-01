@@ -13,6 +13,18 @@ the 3.x → 4.x releases is
 Phases 1, 2, 3 and R of `doc/plan/ALIGNMENT-PLAN.md`, released together: they only
 pass CI as a set (Q17), so 3.2.0 and 3.3.0 were never tagged.
 
+#### Known issues
+
+- Every upstream image carries fixable HIGH/CRITICAL CVEs (first `security-scan` run,
+  per image, fixable only): watchtower 1.7.1 (unmaintained upstream), caddy 2.9.1
+  (IAM), step-ca/step-cli 0.29.0, Keycloak 26.0.7, postgres 15-alpine, and the images
+  built on them. The image scan is report-only until they are bumped (Dependabot);
+  the counts are in each run's job summary.
+- TD-13: the RStudio images (`rstudio-sssd`, `rstudio-samba`) don't build. Upstream
+  `docker-deploy/Dockerfile.{sssd,samba}` install `r-cran-bspm`/`python3-bspm` before
+  adding their PPA (and the c2d4u PPA has no noble build), and `sssd-client` is not an
+  Ubuntu package. R-studioConf's nightly build fails the same way; fix it there.
+
 ### Phase 1: governance files, Makefile, AGENTS.md
 
 #### Added
@@ -80,6 +92,8 @@ pass CI as a set (Q17), so 3.2.0 and 3.3.0 were never tagged.
 - Scripts: `command -v` checks for the host binaries (rule 13), `trap` cleanup of
   temp files, including the provisioner password copied into the step-ca container
   by `generate_token.sh` (rule 14).
+- `Dockerfile.keycloak` states `USER 1000` (the base image's user); `trivy config`
+  exceptions for Caddy and OOD are justified in `tests/lint/.trivyignore.yaml`.
 - `infra-ood/.env.example` added. Known issues re-checked: TD-03, TD-06, TD-08 fixed,
   TD-05 by design, TD-12 opened (K8s OOD manifest uses an image that was never published).
 

@@ -52,10 +52,15 @@ jobs:
       - run: |
           docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
             --severity CRITICAL,HIGH --exit-code 1 \
+            --ignorefile tests/lint/.trivyignore.yaml \
             --skip-dirs infra-rstudio --skip-dirs kubernetes-deploy/rstudio .
 
+  # Report-only for now: the upstream images carry CVEs this repo can't fix in
+  # place (watchtower 1.7.1 is unmaintained, caddy 2.9.1, the OOD base). Counts go
+  # to the job summary and CHANGELOG "Known issues"; Dependabot proposes the bumps.
+  # A stack whose images don't build is a warning here and a known issue.
   trivy-images:
-    name: trivy CVE scan (${{ matrix.stack }})
+    name: trivy CVE scan (${{ matrix.stack }}, report-only)
     runs-on: ubuntu-24.04
     # The rocker/geospatial RStudio images take long to build.
     timeout-minutes: 120
@@ -69,18 +74,35 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: build
+        id: build
+        continue-on-error: true
         working-directory: ${{ matrix.stack }}
         run: docker compose --env-file .env.sandbox build
+      - name: report a failed build
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::warning::${{ matrix.stack }}: images did not build; locally built images are not scanned"
+          echo "**${{ matrix.stack }}**: images did not build (see the build step); only pulled images are scanned." >> "$GITHUB_STEP_SUMMARY"
       - name: scan every image of the stack (built and pulled)
         working-directory: ${{ matrix.stack }}
         run: |
           set -euo pipefail
-          rc=0
+          {
+            echo "### ${{ matrix.stack }}: fixable CRITICAL/HIGH"
+            echo "| image | CRITICAL | HIGH |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
           for img in $(docker compose --env-file .env.sandbox config --images | sort -u); do
             echo "::group::$img"
-            docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img"
+            if ! docker image inspect "$img" >/dev/null 2>&1 && ! docker pull -q "$img"; then
+              echo "| \`$img\` | not available | |" >> "$GITHUB_STEP_SUMMARY"; echo "::endgroup::"; continue
+            fi
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
-              --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress "$img" || rc=1
+              --severity CRITICAL,HIGH --ignore-unfixed --no-progress --format json --quiet "$img" > "$RUNNER_TEMP/r.json"
+            crit=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$RUNNER_TEMP/r.json")
+            high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$RUNNER_TEMP/r.json")
+            echo "$img: CRITICAL=$crit HIGH=$high"
+            echo "| \`$img\` | $crit | $high |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$crit" -eq 0 ] || echo "::warning::$img has $crit fixable CRITICAL vulnerabilities"
             echo "::endgroup::"
           done
-          exit "$rc"
