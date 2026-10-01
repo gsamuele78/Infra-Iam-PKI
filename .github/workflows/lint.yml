@@ -1,0 +1,78 @@
+# .github/workflows/lint.yml
+# Every job runs one Makefile target, so `make lint` locally is this workflow.
+# Replaces ai-context.yml (which ran only validate.sh, generate.sh --check and
+# compose config).
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  constraints:
+    name: hard rules (validate.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make constraints
+
+  agents-check:
+    name: generated agent files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make agents-check
+
+  shellcheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make shellcheck
+
+  yamllint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make yamllint YAMLLINT="pipx run yamllint==1.37.1"
+
+  hadolint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: install hadolint v2.14.0 (checksum-verified)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/hadolint" \
+            https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64
+          echo "6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47  $RUNNER_TEMP/hadolint" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/hadolint" /usr/local/bin/hadolint
+      - run: make hadolint
+
+  markdownlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make markdownlint
+
+  compose-config:
+    name: docker compose config (4 stacks + sandbox)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make validate

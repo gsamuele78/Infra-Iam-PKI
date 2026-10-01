@@ -1,0 +1,86 @@
+# .github/workflows/security-scan.yml
+# gitleaks: PRs and pushes scan only their own commits; the weekly run scans the
+# whole history and stays red until the history purge (ALIGNMENT-PLAN Q1) is done.
+# trivy: misconfiguration scan of the non-vendored files, then a CVE scan of every
+# image the four stacks run (RStudio included: R-studioConf CI has no image scan).
+name: security-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1" # Monday 04:00 UTC, full-history gitleaks
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  TRIVY_IMAGE: aquasec/trivy:0.74.0
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: scan
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request) range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" ;;
+            push)         range="${{ github.event.before }}..${{ github.sha }}" ;;
+            *)            range="" ;;   # schedule / dispatch: whole history
+          esac
+          # A new branch push has before=0000…: scan just the pushed commit then.
+          case "$range" in 0000000000000000000000000000000000000000..*) range="${{ github.sha }}~1..${{ github.sha }}" ;; esac
+          docker run --rm -v "$PWD:/repo" -w /repo "$GITLEAKS_IMAGE" git \
+            --config tests/lint/.gitleaks.toml --redact --no-banner \
+            ${range:+--log-opts="$range"} .
+
+  trivy-config:
+    name: trivy misconfiguration (Dockerfiles, compose, K8s)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
+            --severity CRITICAL,HIGH --exit-code 1 \
+            --skip-dirs infra-rstudio --skip-dirs kubernetes-deploy/rstudio .
+
+  trivy-images:
+    name: trivy CVE scan (${{ matrix.stack }})
+    runs-on: ubuntu-24.04
+    # The rocker/geospatial RStudio images take long to build.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [infra-pki, infra-iam, infra-ood, infra-rstudio]
+    env:
+      # Only infra-rstudio uses profiles; enabling all of them builds every image.
+      COMPOSE_PROFILES: sssd,samba,portal,oidc,ai
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: build
+        working-directory: ${{ matrix.stack }}
+        run: docker compose --env-file .env.sandbox build
+      - name: scan every image of the stack (built and pulled)
+        working-directory: ${{ matrix.stack }}
+        run: |
+          set -euo pipefail
+          rc=0
+          for img in $(docker compose --env-file .env.sandbox config --images | sort -u); do
+            echo "::group::$img"
+            docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+              --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress "$img" || rc=1
+            echo "::endgroup::"
+          done
+          exit "$rc"

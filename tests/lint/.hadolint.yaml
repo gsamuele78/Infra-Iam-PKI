@@ -1,0 +1,10 @@
+---
+# tests/lint/.hadolint.yaml
+ignored:
+  # Debian/Ubuntu apt pins break on every point release of the base image;
+  # base images are pinned instead (HC-07). Revisit per Dockerfile if needed.
+  - DL3008
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+  - quay.io

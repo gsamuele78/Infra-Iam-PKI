@@ -57,7 +57,7 @@ data:
       -webkit-backdrop-filter: blur(12px) !important;
       border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
-    
+
     .navbar-brand { color: white !important; font-weight: 700; }
     .navbar-brand::after { content: " Dipartimento BiGeA"; color: #cbd5e1; font-weight: 400; }
 

@@ -51,13 +51,37 @@ CHECKS=0
 pass() { echo -e "  ${GREEN}✓${NC} $1"; }
 fail() { echo -e "  ${RED}✗ FAIL:${NC} $1"; ERRORS=$((ERRORS + 1)); }
 warn() { echo -e "  ${YELLOW}⚠ WARN:${NC} $1"; WARNINGS=$((WARNINGS + 1)); }
-hint() { [ "$SHOW_HINTS" = true ] && echo -e "    ${BLUE}→ Fix:${NC} $1"; }
+hint() { if [ "$SHOW_HINTS" = true ]; then echo -e "    ${BLUE}→ Fix:${NC} $1"; fi; return 0; }
 section() { echo ""; echo -e "${BOLD}[$1]${NC}"; }
 
 COMPOSE_FILES=$(find "$PROJECT_ROOT" -name 'docker-compose.yml' -not -path '*/old/*' -not -path '*/.git/*' -not -path '*/kubernetes-deploy/*' 2>/dev/null || true)
 SANDBOX_COMPOSE=$(find "$PROJECT_ROOT/sandbox" -name '*.yml' -not -path '*/.git/*' 2>/dev/null || true)
-ALL_COMPOSE="$COMPOSE_FILES $SANDBOX_COMPOSE"
-SCRIPTS=$(find "$PROJECT_ROOT/scripts" -name '*.sh' -not -path '*/.git/*' 2>/dev/null || true)
+
+SCRIPTS=$(find "$PROJECT_ROOT" -name '*.sh' -not -path '*/.git/*' -not -path '*/.vagrant/*' -not -path '*/node_modules/*' -not -path '*/.serena/*' -not -path '*/.omo/*' 2>/dev/null | sort || true)
+
+# Vendored trees (infra-rstudio/UPSTREAM.lock) are byte-identical copies of
+# R-studioConf: their scripts are governed by R-studioConf's own gate and their
+# integrity by `scripts/infra-rstudio/sync_rstudioconf.sh --check`. Script-level
+# checks skip them; compose/Dockerfile checks still apply. Local files listed
+# in the lock stay in scope.
+VENDOR_LOCK="$PROJECT_ROOT/infra-rstudio/UPSTREAM.lock"
+VENDORED_SCRIPTS=""
+if [ -f "$VENDOR_LOCK" ] && command -v jq >/dev/null 2>&1; then
+    while IFS=$'\t' read -r vdir vlocal vfiles; do
+        while IFS= read -r s; do
+            rel="${s#"$PROJECT_ROOT/$vdir/"}"
+            if [ "$vfiles" != null ]; then
+                jq -e --arg r "$rel" 'index($r) != null' <<<"$vfiles" >/dev/null || continue
+            else
+                jq -e --arg r "$rel" 'index($r) != null' <<<"$vlocal" >/dev/null && continue
+            fi
+            VENDORED_SCRIPTS="${VENDORED_SCRIPTS}${s}"$'\n'
+        done < <(printf '%s\n' "$SCRIPTS" | grep -F "$PROJECT_ROOT/$vdir/" || true)
+    done < <(jq -r '.mappings[] | [.to, (.local // [] | tojson), (.files // null | tojson)] | @tsv' "$VENDOR_LOCK")
+    if [ -n "$VENDORED_SCRIPTS" ]; then
+        SCRIPTS=$(comm -23 <(printf '%s\n' "$SCRIPTS" | sort) <(printf '%s' "$VENDORED_SCRIPTS" | sort))
+    fi
+fi
 DOCKERFILES=$(find "$PROJECT_ROOT" -name 'Dockerfile*' -not -path '*/.git/*' -not -path '*/kubernetes-deploy/*' 2>/dev/null || true)
 
 echo -e "${BOLD}═══════════════════════════════════════${NC}"
@@ -92,6 +116,29 @@ done
 [ "$ERRORS" -eq 0 ] && pass "All production compose services have resource limits"
 
 # ──────────────────────────────────────────────────────────────
+# HC-01b: Every long-running service has a healthcheck
+# One-shot services (restart: "no" or on-failure:N) are exempt: they are gated with
+# condition: service_completed_successfully instead.
+# ──────────────────────────────────────────────────────────────
+section "HC-01b: Healthcheck on every long-running service"
+HC01B_ERRORS_BEFORE=$ERRORS
+for f in $COMPOSE_FILES; do
+    rel_path="${f#$PROJECT_ROOT/}"
+    services=$(awk '/^services:/ {in_src=1; next} /^[^ #]/ {in_src=0} in_src && /^  [a-zA-Z0-9_-]+:/ {print $1}' "$f" | sed 's/://' || true)
+    for svc in $services; do
+        CHECKS=$((CHECKS + 1))
+        block=$(awk -v svc="$svc" 'BEGIN{p=0} /^[^ #]/{p=0} /^  [a-zA-Z0-9_-]+:/{if($1==svc":"){p=1}else{p=0}} p{print}' "$f")
+        # One-shot jobs: restart "no", or a bounded retry (on-failure:N)
+        echo "$block" | grep -qE '^\s+restart:\s*"?(no|on-failure:[0-9]+)"?\s*(#.*)?$' && continue
+        if ! echo "$block" | grep -qE '^\s+healthcheck:'; then
+            fail "$rel_path → long-running service '$svc' has no healthcheck"
+            hint "Add a healthcheck (or restart: \"no\" if it is a one-shot job)"
+        fi
+    done
+done
+[ "$ERRORS" -eq "$HC01B_ERRORS_BEFORE" ] && pass "Every long-running service has a healthcheck"
+
+# ──────────────────────────────────────────────────────────────
 # HC-02: No named Docker volumes
 # ──────────────────────────────────────────────────────────────
 section "HC-02: No named Docker volumes (bind mounts only)"
@@ -123,12 +170,13 @@ HC03_ERRORS_BEFORE=$ERRORS
 for f in $SCRIPTS; do
     CHECKS=$((CHECKS + 1))
     rel_path="${f#$PROJECT_ROOT/}"
-    # Check first 5 lines for set -euo pipefail or set -e (minimum)
-    head_content=$(head -5 "$f")
-    if ! echo "$head_content" | grep -q 'set -e'; then
+    # The first CODE line (after the shebang and any comment header) must be
+    # the set line; a commented-out '#set -e' does not count.
+    head_content=$(awk 'NR==1 && /^#!/ {next} /^[[:space:]]*(#|$)/ {next} {print; exit}' "$f")
+    if ! echo "$head_content" | grep -qE '^set -e'; then
         fail "$rel_path → missing 'set -euo pipefail' (or at minimum 'set -e')"
         hint "Add 'set -euo pipefail' as the second line after shebang"
-    elif ! echo "$head_content" | grep -q 'set -euo pipefail'; then
+    elif ! echo "$head_content" | grep -qE '^set -euo pipefail'; then
         warn "$rel_path → has 'set -e' but not full 'set -euo pipefail'"
     fi
 done
@@ -192,7 +240,29 @@ for f in $COMPOSE_FILES; do
         fi
     done < <(grep -E '^\s+image:' "$f" 2>/dev/null || true)
 done
-[ "$ERRORS" -eq "$HC07_ERRORS_BEFORE" ] && pass "All upstream images have pinned versions"
+for f in $DOCKERFILES; do
+    CHECKS=$((CHECKS + 1))
+    rel_path="${f#$PROJECT_ROOT/}"
+    # Stage aliases defined in this file may be reused in later FROM lines.
+    stages=$(grep -iE '^\s*FROM\s' "$f" | grep -ioE '\sAS\s+[A-Za-z0-9_.-]+' | awk '{print tolower($2)}' || true)
+    while IFS= read -r ref; do
+        [ -z "$ref" ] && continue
+        echo "$stages" | grep -qxF "$(echo "$ref" | tr '[:upper:]' '[:lower:]')" && continue
+        [[ "$ref" == *@sha256:* ]] && continue
+        tag="${ref##*:}"
+        # ${ARG} references are resolved from the ARG default in the same file
+        if [[ "$ref" == *'${'* ]]; then
+            arg=$(echo "$ref" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' | head -1 | tr -d '${')
+            grep -qE "^ARG ${arg}=[^[:space:]]+" "$f" || { fail "$rel_path → FROM '$ref': ARG $arg has no default"; hint "Give ARG $arg a pinned default"; }
+            continue
+        fi
+        if [[ "$ref" != *:* ]] || [[ "$tag" == "latest" ]] || [[ "$tag" == "builder" ]] || [[ "$tag" == */* ]]; then
+            fail "$rel_path → FROM '$ref' is not pinned to a version"
+            hint "Use an explicit version tag, e.g. caddy:2.9.1-builder-alpine"
+        fi
+    done < <(grep -iE '^\s*FROM\s' "$f" | awk '{for(i=2;i<=NF;i++) if($i !~ /^--/){print $i; break}}')
+done
+[ "$ERRORS" -eq "$HC07_ERRORS_BEFORE" ] && pass "All upstream images and Dockerfile FROM lines have pinned versions"
 
 # ──────────────────────────────────────────────────────────────
 # HC-08: .env not tracked in git
@@ -213,12 +283,26 @@ fi
 # Check if any .env (non-sandbox, non-example) is tracked
 CHECKS=$((CHECKS + 1))
 if command -v git &>/dev/null && [ -d "$PROJECT_ROOT/.git" ]; then
-    tracked_envs=$(git -C "$PROJECT_ROOT" ls-files '*.env' 2>/dev/null | grep -v '.env.sandbox' | grep -v '.env.example' | grep -v '.env.template' || true)
+    # Any .env variant (.env, x.env, .env.prod, ".env copy") except the
+    # committed templates .env.example / .env.sandbox / .env.sandbox.example / *.env.template.
+    tracked_envs=$(git -C "$PROJECT_ROOT" ls-files 2>/dev/null \
+        | grep -E '(^|/)[^/]*\.env([ .][^/]*)?$|(^|/)\.env[^/]*$' \
+        | grep -vE '\.env\.(example|sandbox|sandbox\.example)$|\.env\.template$' || true)
     if [ -n "$tracked_envs" ]; then
-        fail "Production .env files tracked in git: $tracked_envs"
+        fail "Production .env files tracked in git: $(echo "$tracked_envs" | tr '\n' ' ')"
         hint "git rm --cached <file> && add to .gitignore"
     else
         pass "No production .env files tracked in git"
+    fi
+
+    CHECKS=$((CHECKS + 1))
+    tracked_keys=$(git -C "$PROJECT_ROOT" ls-files 2>/dev/null \
+        | grep -E '(^|/)\.vagrant/|(^|/)private_key$|\.(key|pem|p12)$|(^|/)oauth2-proxy\.cfg$' || true)
+    if [ -n "$tracked_keys" ]; then
+        fail "Key material or live secret config tracked in git: $(echo "$tracked_keys" | tr '\n' ' ')"
+        hint "git rm --cached <file>, add it to .gitignore, rotate the secret"
+    else
+        pass "No key material or live secret config tracked in git"
     fi
 fi
 
