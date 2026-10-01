@@ -1,6 +1,6 @@
 # Infra-IAM-PKI: Certified Infrastructure & Identity
 
-**Version:** 3.1.0
+**Version:** see [CHANGELOG.md](CHANGELOG.md) and the git tags
 **Maintainer:** JFS — IT Officer (Funzionario Tecnico Informatico), BiGeA, Università di Bologna
 
 ## 1. Project Overview
