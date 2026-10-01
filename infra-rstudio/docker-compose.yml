@@ -53,10 +53,22 @@ services:
     image: tecnativa/docker-socket-proxy:0.3.0
     container_name: rstudio_socket_proxy
     restart: unless-stopped
-    network_mode: "host"
+    # NOT on the host network: the image binds [::]:2375 unconditionally (its
+    # entrypoint overwrites BIND_CONFIG), which would expose the Docker API to the
+    # LAN. It lives on its own bridge and is published on loopback only; the
+    # host-network telemetry service reaches it at tcp://127.0.0.1:2375.
+    networks: [ rstudio-proxy-net ]
+    ports:
+      - "127.0.0.1:2375:2375"
     environment:
       - CONTAINERS=1   # Allow read-only access to containers API
       - INFO=1
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q OK" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
@@ -74,7 +86,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sssd
-    image: ${RSTUDIO_SSSD_IMAGE:-rstudio-botanical-sssd}:${IMAGE_TAG:-v1.0.0}
+    image: ${RSTUDIO_SSSD_IMAGE:-rstudio-botanical-sssd}:${IMAGE_TAG}
     container_name: rstudio_pet
     restart: unless-stopped
     network_mode: "host"
@@ -125,7 +137,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.samba
-    image: ${RSTUDIO_SAMBA_IMAGE:-rstudio-botanical-samba}:${IMAGE_TAG:-v1.0.0}
+    image: ${RSTUDIO_SAMBA_IMAGE:-rstudio-botanical-samba}:${IMAGE_TAG}
     container_name: rstudio_pet
     restart: unless-stopped
     network_mode: "host"
@@ -174,7 +186,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.nginx
-    image: ${PORTAL_NGINX_IMAGE:-botanical-portal-nginx}:${IMAGE_TAG:-v1.0.0}
+    image: ${PORTAL_NGINX_IMAGE:-botanical-portal-nginx}:${IMAGE_TAG}
     container_name: nginx_portal
     restart: unless-stopped
     network_mode: "host"
@@ -208,7 +220,7 @@ services:
   # --- OAuth2-Proxy Sidecar (OIDC Authentication) ---
   oauth2-proxy:
     profiles: [ "oidc" ]
-    image: ${OAUTH2_PROXY_IMAGE:-quay.io/oauth2-proxy/oauth2-proxy}:${OAUTH2_PROXY_TAG:-v7.6.0}
+    image: ${OAUTH2_PROXY_IMAGE:-quay.io/oauth2-proxy/oauth2-proxy}:${OAUTH2_PROXY_TAG:-v7.6.0-alpine}
     container_name: oauth2_proxy
     restart: unless-stopped
     command:
@@ -216,6 +228,13 @@ services:
     volumes:
       - ${OAUTH2_PROXY_CONFIG:-./config/oauth2-proxy.cfg}:/etc/oauth2-proxy.cfg:ro
     network_mode: "host"
+    healthcheck:
+      # -alpine tag: the default image is distroless and has no shell or wget.
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:4180/ping >/dev/null" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -234,7 +253,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.telemetry
-    image: ${TELEMETRY_API_IMAGE:-botanical-telemetry-api}:${IMAGE_TAG:-v1.0.0}
+    image: ${TELEMETRY_API_IMAGE:-botanical-telemetry-api}:${IMAGE_TAG}
     container_name: telemetry_api
     restart: unless-stopped
     network_mode: "host"
@@ -246,6 +265,7 @@ services:
       - /tmp:/hostfs/tmp:ro
       - /proc:/hostfs/proc:ro
       - ${TELEMETRY_HOST_RUN:-/var/run}:/var/run:ro
+      - ${ADMIN_RECIPIENTS_FILE:-./config/site/admin_recipients.txt}:/etc/biome-calc/conf/admin_recipients.txt:ro
     environment:
       - DOCKER_HOST=tcp://127.0.0.1:2375
       # Tell telemetry to look for disk paths on /hostfs
@@ -277,7 +297,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ollama
-    image: ${OLLAMA_AI_IMAGE:-botanical-ai-ollama}:${IMAGE_TAG:-v1.0.0}
+    image: ${OLLAMA_AI_IMAGE:-botanical-ai-ollama}:${IMAGE_TAG}
     container_name: ollama_ai
     restart: on-failure
     network_mode: "host"
@@ -306,3 +326,9 @@ services:
 
 # No named volumes — all bind mounts (HC-02)
 # No version: key — Compose v2 does not need it (HC-09)
+
+networks:
+  # Only the docker-socket-proxy uses it; every other rstudio service stays on
+  # network_mode: host (SSSD/Winbind socket passthrough, see doc/architecture/SYSTEM_OVERVIEW.md).
+  rstudio-proxy-net:
+    driver: bridge

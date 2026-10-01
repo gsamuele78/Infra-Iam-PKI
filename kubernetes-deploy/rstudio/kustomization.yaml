@@ -16,6 +16,7 @@ resources:
 - ingress.yaml
 - ollama-deployment.yaml
 - telemetry-api-deployment.yaml
+- oauth2-proxy-deployment.yaml
 
 # Enable configMapGenerator to trigger pod restarts if config changes
 configMapGenerator:
@@ -59,6 +60,6 @@ images:
 - name: ghcr.io/unibo/r-studioconf/botanical-telemetry-api
   newTag: "v1.0.0"
 - name: ghcr.io/unibo/r-studioconf/botanical-ai-ollama
-  newTag: "v0.1.28"
+  newTag: "v1.0.0"
 - name: quay.io/oauth2-proxy/oauth2-proxy
   newTag: "v7.6.0"
