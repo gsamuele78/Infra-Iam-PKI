@@ -44,16 +44,23 @@ jobs:
             ${range:+--log-opts="$range"} .
 
   trivy-config:
-    name: trivy misconfiguration (Dockerfiles, compose, K8s)
+    name: trivy misconfiguration (Dockerfiles, compose; K8s report-only)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: |
+      - name: Dockerfiles and compose (blocking)
+        run: |
           docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
             --severity CRITICAL,HIGH --exit-code 1 \
             --ignorefile tests/lint/.trivyignore.yaml \
-            --skip-dirs infra-rstudio --skip-dirs kubernetes-deploy/rstudio .
+            --skip-dirs infra-rstudio --skip-dirs kubernetes-deploy .
+      # K8s is experimental (ALIGNMENT-PLAN Q4): findings are listed, not enforced.
+      - name: kubernetes-deploy (report-only)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGE" config \
+            --severity CRITICAL,HIGH --exit-code 0 \
+            --skip-dirs kubernetes-deploy/rstudio kubernetes-deploy
 
   # Report-only for now: the upstream images carry CVEs this repo can't fix in
   # place (watchtower 1.7.1 is unmaintained, caddy 2.9.1, the OOD base). Counts go
