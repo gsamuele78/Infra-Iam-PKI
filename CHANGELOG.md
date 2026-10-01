@@ -8,6 +8,18 @@ the 3.x → 4.x releases is
 
 ## [Unreleased]
 
+### Security
+
+- History purged and force-pushed (2026-10-01, decision Q1): the `.env` files,
+  `oauth2-proxy.cfg`, the 6 RStudio site files and 4 private SMTP/contact values are
+  gone from every branch and tag (gitleaks on the rewritten history: 0 findings; `main`'s
+  tree unchanged). **Every clone must be reset** (see `purge_git_history.sh`, step 3).
+  The old commits stay reachable through PR #1 until GitHub Support removes them, and
+  the secrets listed by the script must be rotated on the hosts.
+- `purge_git_history.sh`: no longer redacts the public mail domain (it would have
+  rewritten the live Keycloak theme), pushes heads and tags instead of `--mirror`, and
+  documents the reset and the refs/pull limit.
+
 ## [3.4.0] - 2026-10-01
 
 Phases 1, 2, 3 and R of `doc/plan/ALIGNMENT-PLAN.md`, released together: they only
