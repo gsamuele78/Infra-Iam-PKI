@@ -56,8 +56,11 @@ PURGE_GLOBS=(
 # values. Their values are redacted in every revision with --replace-text;
 # the replacement list is built at run time in the work dir and never printed.
 # Format: "<path>|<KEY1> <KEY2> ..."
+# Only values that are private: --replace-text rewrites them in EVERY file of
+# every revision, HEAD included. MAIL_DOMAIN is the public institutional domain
+# and appears in the live Keycloak theme, so it is not redacted.
 REDACT_KEYS=(
-    "infra-rstudio/config/setup_nodes.vars.conf|BIOME_CONTACT MAIL_DOMAIN MAIL_DOMAINS_USER SENDER_EMAIL SMTP_DNS_SERVERS SMTP_HOST"
+    "infra-rstudio/config/setup_nodes.vars.conf|BIOME_CONTACT SENDER_EMAIL SMTP_DNS_SERVERS SMTP_HOST"
 )
 
 WORK="$(mktemp -d /tmp/infra-iam-pki-purge.XXXXXX)"
@@ -135,10 +138,16 @@ cat <<EOF
 Next steps (manual, by the maintainer):
   1. Rotate every secret listed above on the real hosts
      (list saved in $WORK/rotate.txt; record the rotation privately).
-  2. Push the rewritten history (needs force; affects every clone):
+  2. Check that HEAD did not change, then push branches and tags (not
+     --mirror: GitHub rejects the read-only refs/pull/* and the push errors):
        cd $WORK/repo.git
-       git push --force --mirror git@github.com:gsamuele78/Infra-Iam-PKI.git
-  3. Re-clone every working copy; delete old clones (they still hold the secrets).
-  4. Ask GitHub support to purge cached views of the old commits if the
-     repo was ever public.
+       git rev-parse 'main^{tree}'   # must equal the tree of origin/main before the purge
+       git push --force <remote-url> 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'
+  3. Every working copy: fetch, `git reset --hard origin/main`, re-fetch the tags,
+     then `git reflog expire --expire=now --all && git gc --prune=now`; delete old
+     clones. Gitignored files survive a reset, but files that were tracked in your
+     old local HEAD and untracked upstream are deleted by a pull: back them up first.
+  4. Old commits stay reachable through every pull request's refs/pull/N/head
+     and by SHA. Only GitHub Support can drop them ("remove sensitive data"
+     request listing the PRs); rotation (step 1) is what actually protects you.
 EOF
