@@ -1,0 +1,15 @@
+# tests/lint/.trivyignore.yaml — justified exceptions for `trivy config`.
+# Every entry names the file and why the finding does not apply.
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - "infra-pki/caddy/Dockerfile"
+    statement: >-
+      The runtime user is set by infra-pki/docker-compose.yml (`user: "${PUID}:${PGID}"`);
+      the caddy base image has no unprivileged user to switch to.
+  - id: DS-0002
+    paths:
+      - "infra-ood/Dockerfile.ood"
+    statement: >-
+      Open OnDemand's Apache must start as root to spawn per-user nginx (PUN)
+      processes via sudo; it drops privileges per request by design.
