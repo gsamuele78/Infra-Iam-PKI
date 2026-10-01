@@ -1,0 +1,33 @@
+---
+# tests/lint/.yamllint.yml
+extends: default
+
+rules:
+  line-length:
+    max: 140
+    level: warning
+  # Compose and K8s files here are single documents without `---`.
+  document-start: disable
+  # GitHub Actions' `on:` is a YAML 1.1 boolean keyword: harmless.
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  # K8s manifests mix kubectl-style (unindented) and indented sequences.
+  indentation:
+    spaces: consistent
+    indent-sequences: whatever
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+
+ignore: |
+  .git/
+  .serena/
+  .omo/
+  sandbox/.vagrant/
+  tests/lab/.vagrant/
+  # Vendored from R-studioConf (infra-rstudio/UPSTREAM.lock): linted upstream.
+  infra-rstudio/
+  kubernetes-deploy/rstudio/

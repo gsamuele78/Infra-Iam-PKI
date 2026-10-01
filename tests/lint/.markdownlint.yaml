@@ -1,0 +1,12 @@
+---
+# tests/lint/.markdownlint.yaml
+default: true
+# Prose is wrapped for reading; headings, URLs and code routinely pass 80 chars.
+MD013: false
+# Inline HTML (<br>, <details>) is allowed where a table needs it.
+MD033: false
+# Repeated headings ("## Context", "### Verification gate") are intentional in
+# ADRs and plans.
+MD024: false
+# Tables are hand-formatted, not column-aligned.
+MD060: false

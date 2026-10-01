@@ -44,7 +44,8 @@ For EACH service in the compose file, verify:
 ## Output Format
 
 For each finding:
-```
+
+```text
 [PASS/FAIL/WARN] HC-XX: Service 'name' — description
   → Fix: specific fix instruction
 ```
@@ -52,5 +53,6 @@ For each finding:
 ## Resources
 
 Read the full constraint documentation:
+
 - `.ai/project.yml` — structured constraint definitions
 - `.ai/agents.md` — narrative documentation with rationale

@@ -79,7 +79,7 @@ spec:
     - namespaceSelector:
         matchLabels:
           name: ood
-    - namespaceSelector: 
+    - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: ingress-nginx # Assuming default RKE2 Ingress NGINX
     ports:

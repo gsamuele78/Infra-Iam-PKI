@@ -176,6 +176,7 @@ The stack uses Docker Compose profiles to enable optional components. Activate p
 | `ai` | `ollama-ai` | Local LLM assistant is desired |
 
 **Example — standard SSSD deployment with OIDC SSO:**
+
 ```bash
 docker compose --profile sssd --profile portal --profile oidc up -d --build
 ```

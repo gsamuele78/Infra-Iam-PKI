@@ -87,7 +87,7 @@ vagrant destroy -f
 | `infra-pki`   | `fingerprint` created as empty **directory** instead of file | Changed `fingerprint-writer` to write to `fingerprint/root_ca.fingerprint` |
 | `infra-pki`   | `nickfedor/watchtower` image pulled from non-existing repo | Changed to `containrrr/watchtower:1.7.1` |
 | `infra-iam`   | Same watchtower image issue | Fixed to `containrrr/watchtower:1.7.1` |
-| `infra-iam`   | `iam-init` crashes: `fetch_pki_root.sh` uses relative path that doesn't exist inside container | Hardened to use safe `cd ... || echo '/app'` fallback |
+| `infra-iam`   | `iam-init` crashes: `fetch_pki_root.sh` uses relative path that doesn't exist inside container | Hardened to use safe `cd ... \|\| echo '/app'` fallback |
 | `infra-ood`   | `osc/ondemand:3.1.0` Docker image never existed on Docker Hub | Replaced with `Dockerfile.ood` using official Ubuntu Noble deb packages from `apt.osc.edu` |
 | `infra-pki`   | Caddy served `/fingerprint` as a single path instead of directory subtree | Changed Caddyfile to `/fingerprint/*` |
 | `infra-iam`   | IAM received empty `FINGERPRINT` because PKI fingerprint wasn't readable | DNS/HTTP retrieval from PKI host now automatic in Vagrantfile provisioner |

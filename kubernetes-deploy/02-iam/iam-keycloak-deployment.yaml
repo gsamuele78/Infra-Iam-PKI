@@ -37,13 +37,13 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
-      
+
       initContainers:
       # 1. Pessimistic DB Wait: Keycloak hangs if DB is not ready during boot
       - name: wait-for-db
         image: postgres:15-alpine
         command: ['sh', '-c', 'until pg_isready -h iam-db -U keycloak; do echo waiting for db; sleep 2; done;']
-      
+
       # 2. Extract internal certificates dynamically from PKI API instead of generic volumes
       - name: fetch-pki-certs
         image: smallstep/step-cli:0.29.0
@@ -54,7 +54,7 @@ spec:
         - sh
         - -c
         - |
-          # The PKI Service needs to be ready. 
+          # The PKI Service needs to be ready.
           # Note: We use step-ca.pki.svc.cluster.local:9000 since it is across namespaces
           until step ca root /certs/root_ca.crt --ca-url https://step-ca.pki.svc.cluster.local:9000 --fingerprint ${FINGERPRINT} --force; do
             echo "Waiting for PKI CA to come online..."
@@ -123,7 +123,7 @@ spec:
         - name: shared-certs
           mountPath: /certs
           readOnly: true
-      
+
       volumes:
       - name: shared-certs
         emptyDir: {}
