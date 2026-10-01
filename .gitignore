@@ -1,13 +1,19 @@
-# .gitignore for Infra-PKI
+# .gitignore for Infra-IAM-PKI
+# Rule: real configuration and every secret stay on the deployed host.
+# Committed templates are *.env.example (production placeholders) and
+# *.env.sandbox (lab-only values). See docs/maintenance-guide.md.
 
-# Environment Variables (Secrets)
+# Environment files (secrets). Any `.env`, `.env.*`, `*.env`, `.env copy`.
 .env
+.env.*
 *.env
+*.env copy
+.env copy*
 !.env.example
-infra-iam/.env
-infra-pki/.env
+!.env.sandbox
+!*.env.template
 
-# Data Directories
+# Data directories (bind mounts created by deploy scripts / init containers)
 step_data/
 db_data/
 logs/
@@ -15,18 +21,36 @@ keycloak_data/
 caddy_data/
 certs/
 
-# Secrets
+# Secrets and key material
 secrets/
 *.key
 *.crt
 *.pem
 *.p12
+private_key
 
-# Generated Scripts/Tokens
+# Generated scripts / tokens
 *_join_pki.env
 
 # Backups
 backups/
 
-# System Files
+# Vagrant state and lab output (never commit: contains machine private keys)
+.vagrant/
+tests/lab/artifacts/
+tests/lab/logs/
+
+# Python / tool caches
+__pycache__/
+*.pyc
+node_modules/
+
+# System files
 .DS_Store
+
+# Local agent/tool state (Serena LSP cache, memories, per-user config; OhMyOpenCode plans)
+.serena/
+.omo/
+
+# Live oauth2-proxy config holds client_secret/cookie_secret; template is oauth2-proxy.cfg.example
+infra-rstudio/config/oauth2-proxy.cfg
