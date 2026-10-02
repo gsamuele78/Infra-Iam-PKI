@@ -1,0 +1,58 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "serena": {
+      "type": "local",
+      "command": [
+        "uvx", "--from", "serena-agent==1.7.0", "serena", "start-mcp-server",
+        "--project-from-cwd", "--context", "agent", "--open-web-dashboard", "False"
+      ],
+      "enabled": true,
+      "timeout": 60000
+    }
+  },
+  "lsp": {
+    "bash": {
+      "command": ["bash-language-server", "start"],
+      "extensions": [".sh", ".bash"]
+    },
+    "yaml-ls": {
+      "command": ["yaml-language-server", "--stdio"],
+      "extensions": [".yml", ".yaml"],
+      "initialization": {
+        "yaml": {
+          "validate": true,
+          "completion": true,
+          "hover": true,
+          "schemaStore": { "enable": true },
+          "schemas": {
+            "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+              "**/docker-compose*.yml",
+              "**/sandbox/*-sandbox.yml"
+            ],
+            "kubernetes": [
+              "**/kubernetes-deploy/**/*.yaml",
+              "!**/kubernetes-deploy/**/kustomization.yaml"
+            ]
+          }
+        }
+      }
+    },
+    "dockerfile": {
+      "command": ["docker-langserver", "--stdio"],
+      "extensions": [".dockerfile", ".init", ".keycloak", ".renewer", ".ood", ".nginx", ".ollama", ".samba", ".sssd", ".telemetry"]
+    },
+    "marksman": {
+      "command": ["marksman", "server"],
+      "extensions": [".md"]
+    },
+    "pyright": {
+      "command": ["pyright-langserver", "--stdio"],
+      "extensions": [".py", ".pyi"]
+    },
+    "r-languageserver": {
+      "command": ["R", "--no-echo", "-e", "languageserver::run()"],
+      "extensions": [".R", ".r"]
+    }
+  }
+}

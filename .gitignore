@@ -49,9 +49,12 @@ node_modules/
 # System files
 .DS_Store
 
-# Local agent/tool state (Serena LSP cache, memories, per-user config; OhMyOpenCode plans)
-.serena/
+# Local agent/tool state (Serena LSP cache, memories, per-user config; OhMyOpenCode plans).
+# .serena/project.yml is shared on purpose (language servers, ignores); the rest stays local.
+.serena/*
+!.serena/project.yml
 .omo/
+.claude/settings.local.json
 
 # Live oauth2-proxy config holds client_secret/cookie_secret; template is oauth2-proxy.cfg.example
 infra-rstudio/config/oauth2-proxy.cfg

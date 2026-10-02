@@ -1,0 +1,7 @@
+{
+  "name": "infra-iam-pki-lsp",
+  "version": "1.0.0",
+  "description": "Language servers for Infra-IAM-PKI: bash, YAML (compose/k8s schemas), Dockerfile, Markdown, Python, R",
+  "author": { "name": "Infra-IAM-PKI maintainers" },
+  "license": "Apache-2.0"
+}

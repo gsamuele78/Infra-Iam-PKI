@@ -1,0 +1,61 @@
+{
+  "bash": {
+    "command": "bash-language-server",
+    "args": ["start"],
+    "extensionToLanguage": { ".sh": "shellscript", ".bash": "shellscript" }
+  },
+  "yaml": {
+    "command": "yaml-language-server",
+    "args": ["--stdio"],
+    "extensionToLanguage": { ".yml": "yaml", ".yaml": "yaml" },
+    "settings": {
+      "yaml": {
+        "validate": true,
+        "completion": true,
+        "hover": true,
+        "schemaStore": { "enable": true },
+        "schemas": {
+          "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+            "**/docker-compose*.yml",
+            "**/sandbox/*-sandbox.yml"
+          ],
+          "kubernetes": [
+            "**/kubernetes-deploy/**/*.yaml",
+            "!**/kubernetes-deploy/**/kustomization.yaml"
+          ]
+        }
+      }
+    }
+  },
+  "dockerfile": {
+    "command": "docker-langserver",
+    "args": ["--stdio"],
+    "extensionToLanguage": {
+      ".dockerfile": "dockerfile",
+      ".init": "dockerfile",
+      ".keycloak": "dockerfile",
+      ".renewer": "dockerfile",
+      ".ood": "dockerfile",
+      ".nginx": "dockerfile",
+      ".ollama": "dockerfile",
+      ".samba": "dockerfile",
+      ".sssd": "dockerfile",
+      ".telemetry": "dockerfile"
+    }
+  },
+  "markdown": {
+    "command": "marksman",
+    "args": ["server"],
+    "extensionToLanguage": { ".md": "markdown" }
+  },
+  "python": {
+    "command": "pyright-langserver",
+    "args": ["--stdio"],
+    "extensionToLanguage": { ".py": "python" }
+  },
+  "r": {
+    "command": "R",
+    "args": ["--no-echo", "-e", "languageserver::run()"],
+    "extensionToLanguage": { ".R": "r", ".r": "r" }
+  }
+}

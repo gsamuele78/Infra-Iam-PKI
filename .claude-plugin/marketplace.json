@@ -1,0 +1,12 @@
+{
+  "name": "infra-iam-pki",
+  "owner": { "name": "Infra-IAM-PKI maintainers" },
+  "description": "Repo-local Claude Code plugins for Infra-IAM-PKI",
+  "plugins": [
+    {
+      "name": "infra-iam-pki-lsp",
+      "source": "./.claude/lsp-plugin",
+      "description": "Language servers for this repo: bash, YAML (compose/k8s schemas), Dockerfile, Markdown, Python, R"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+# .claudeignore — gitignore syntax. Paths AI agents should not read or index.
+#
+# Claude Code itself ignores this file: the enforced copy of the secret/state
+# rules is permissions.deny in .claude/settings.json. Keep the two in sync.
+# Other tools (IDE extensions, indexers, Serena via .gitignore) read this list.
+
+# --- Secrets: real env files, key material, generated join tokens ----------
+.env
+.env.*
+*.env
+*.env copy
+.env copy*
+!.env.example
+!.env.sandbox
+!.env.sandbox.example
+!*.env.template
+*_join_pki.env
+secrets/
+*.key
+*.crt
+*.pem
+*.p12
+private_key
+
+# Live site config (real secrets, e-mails, AD topology); *.example templates stay readable
+infra-rstudio/config/oauth2-proxy.cfg
+infra-rstudio/config/admin_recipients.txt
+infra-rstudio/config/user_email_map.txt
+infra-rstudio/config/scopri_progetti_known.conf
+infra-rstudio/config/lib_kerberos_setup.vars.conf
+infra-rstudio/config/join_domain_sssd.vars.conf
+infra-rstudio/config/join_domain_samba.vars.conf
+infra-rstudio/config/site/
+
+# --- Runtime data created by deploy scripts (bind mounts) --------------------
+step_data/
+db_data/
+keycloak_data/
+caddy_data/
+certs/
+logs/
+backups/
+
+# --- Lab and tool state ------------------------------------------------------
+.vagrant/
+sandbox/.vagrant/
+tests/lab/artifacts/
+tests/lab/logs/
+.serena/cache/
+.serena/memories/
+.omo/
+.git/
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+
+# --- Noise: binaries and stale copies ---------------------------------------
+*.png
+*.jpg
+*.ico
+*.bak
+
+# --- Generated duplicates of the same rules for other assistants -------------
+# Source of truth: .ai/project.yml + .ai/agents-entry.md (AGENTS.md, CLAUDE.md stay readable).
+.ai/chatgpt.md
+.ai/gemini.md
+.cursorrules
+.windsurfrules
+.clinerules
+.github/copilot-instructions.md

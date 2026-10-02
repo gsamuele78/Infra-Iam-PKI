@@ -8,6 +8,25 @@ the 3.x → 4.x releases is
 
 ## [Unreleased]
 
+### Added (contributor tooling)
+
+- Agent/editor config that starts by itself when the repo is opened in Claude Code or
+  OpenCode: Serena MCP pinned to `serena-agent==1.7.0` (`.mcp.json`, `opencode.json`,
+  shared `.serena/project.yml` with bash, yaml, markdown, python and r servers) and
+  language servers for bash, YAML
+  (Compose and Kubernetes schemas), Dockerfile, Markdown, Python and R
+  (`opencode.json`, repo-local Claude plugin `.claude/lsp-plugin`).
+  `.claude/settings.json` denies reads of secrets and runtime data and edits of vendored
+  RStudio files; `.claudeignore` mirrors the list for other tools.
+
+#### Setup (once per machine)
+
+- `npm i -g bash-language-server yaml-language-server dockerfile-language-server-nodejs pyright`,
+  `marksman` on `PATH`, R package `languageserver`, `uv`.
+- Claude Code: trust the folder; the `infra-iam-pki` marketplace is read from GitHub
+  once this is on the default branch. Before that, run
+  `claude plugin marketplace add ./ --scope local` from the repo root.
+
 ### Fixed
 
 - RStudio images build again (TD-13): synced R-studioConf `47441c5`, which drops
