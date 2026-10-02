@@ -72,7 +72,7 @@ if [ -z "${FINGERPRINT:-}" ]; then
     echo "FINGERPRINT not found in .env."
     # Attempt to fetch from CA (insecurely for verification)
     echo "Fetching CA root..."
-    FETCHED_FINGERPRINT=$(docker run --rm smallstep/step-cli:0.29.0 step ca root --ca-url "$CA_URL" /dev/null --insecure --print-fingerprint | tr -d '\r')
+    FETCHED_FINGERPRINT=$(docker run --rm smallstep/step-cli:0.31.0 step ca root --ca-url "$CA_URL" /dev/null --insecure --print-fingerprint | tr -d '\r')
     
     if [ -z "$FETCHED_FINGERPRINT" ]; then
         echo "Error: Could not fetch fingerprint from $CA_URL"
@@ -102,7 +102,7 @@ docker run --rm \
     --network host \
     -v "$CERT_DIR":/home/step \
     --user "$(id -u):$(id -g)" \
-    smallstep/step-cli:0.29.0 \
+    smallstep/step-cli:0.31.0 \
     step ca root /home/step/root_ca.crt --ca-url "$CA_URL" --fingerprint "$FINGERPRINT" --force
 
 # --- 3. Authentication (OTT) ---
@@ -130,7 +130,7 @@ TOKEN=$(docker run --rm \
     --network host \
     -v "$PASS_FILE":/run/secrets/ca_password:ro \
     -v "$CERT_DIR/root_ca.crt":/run/step-root/root_ca.crt:ro \
-    smallstep/step-cli:0.29.0 \
+    smallstep/step-cli:0.31.0 \
     step ca token "$HOSTNAME" --ca-url "$CA_URL" --root /run/step-root/root_ca.crt \
         --password-file /run/secrets/ca_password --provisioner "$PROVISIONER")
 
@@ -141,7 +141,7 @@ docker run --rm \
     --network host \
     -v "$CERT_DIR":/home/step \
     --user "$(id -u):$(id -g)" \
-    smallstep/step-cli:0.29.0 \
+    smallstep/step-cli:0.31.0 \
     step ca certificate "$HOSTNAME" /home/step/$HOSTNAME.crt /home/step/$HOSTNAME.key \
     --san "$SANS" \
     --token "$TOKEN" \

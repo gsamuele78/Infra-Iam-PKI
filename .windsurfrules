@@ -33,14 +33,14 @@ PINNED VERSIONS (extracted from code — do not override):
   ${RSTUDIO_SAMBA_IMAGE: -rstudio-botanical-samba}:${IMAGE_TAG}
   ${RSTUDIO_SSSD_IMAGE: -rstudio-botanical-sssd}:${IMAGE_TAG}
   ${TELEMETRY_API_IMAGE: -botanical-telemetry-api}:${IMAGE_TAG}
-  caddy: 2.9.1-alpine
+  caddy: 2.11.4-alpine
   containrrr/watchtower: 1.7.1
   curlimages/curl: 8.11.1
   infra-ood: local
   infra-pki-caddy: local # Local build
   postgres: 15-alpine
-  smallstep/step-ca: 0.29.0
-  smallstep/step-cli: 0.29.0
+  smallstep/step-ca: 0.30.2
+  smallstep/step-cli: 0.31.0
   tecnativa/docker-socket-proxy: 0.3.0
 
 WHEN GENERATING CODE:

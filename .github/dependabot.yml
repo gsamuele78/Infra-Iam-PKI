@@ -31,6 +31,12 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      # Open OnDemand 4.1 ships packages for Ubuntu 24.04 (noble) only
+      # (Dockerfile.ood installs ondemand-release-web_4.1.0-noble_all.deb):
+      # a new Ubuntu release waits for an OOD release that supports it.
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       base-images:
         patterns: ["*"]

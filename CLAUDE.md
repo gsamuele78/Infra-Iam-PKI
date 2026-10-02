@@ -34,14 +34,14 @@ PINNED VERSIONS (extracted from code — do not override):
   ${RSTUDIO_SAMBA_IMAGE: -rstudio-botanical-samba}:${IMAGE_TAG}
   ${RSTUDIO_SSSD_IMAGE: -rstudio-botanical-sssd}:${IMAGE_TAG}
   ${TELEMETRY_API_IMAGE: -botanical-telemetry-api}:${IMAGE_TAG}
-  caddy: 2.9.1-alpine
+  caddy: 2.11.4-alpine
   containrrr/watchtower: 1.7.1
   curlimages/curl: 8.11.1
   infra-ood: local
   infra-pki-caddy: local # Local build
   postgres: 15-alpine
-  smallstep/step-ca: 0.29.0
-  smallstep/step-cli: 0.29.0
+  smallstep/step-ca: 0.30.2
+  smallstep/step-cli: 0.31.0
   tecnativa/docker-socket-proxy: 0.3.0
 
 WHEN GENERATING CODE:
@@ -82,7 +82,7 @@ This document is the **single source of truth** for any AI agent working on this
 
 A production-grade **Infrastructure-as-Code (IaC)** system providing:
 
-- **Infra-PKI:** Internal Certificate Authority (Smallstep `step-ca` 0.29.0) backed by PostgreSQL 15, fronted by Caddy L4 proxy with IP allowlisting.
+- **Infra-PKI:** Internal Certificate Authority (Smallstep `step-ca` 0.30.2) backed by PostgreSQL 15, fronted by Caddy L4 proxy with IP allowlisting.
 - **Infra-IAM:** Single Sign-On (Keycloak 26.0.7) with Active Directory LDAPS federation, secured by internal PKI certificates.
 - **Infra-OOD:** Open OnDemand portal (Ubuntu Noble 24.04 deb packages from `apt.osc.edu`) for HPC interactive sessions (RStudio, etc.), authenticated via OIDC against Keycloak.
 - **Infra-RStudio:** Containerized RStudio Server with zero-trust `oauth2-proxy` sidecars, Nginx portal, and SSSD/Samba auth backends for AD domain integration. Uses `network_mode: host` for unix domain socket passthrough.
@@ -119,7 +119,7 @@ The BIOME research group (Biodiversity & MacroEcology) at the Department of Biol
 │        │         │    │        │         │    │        │         │    │        │         │
 │ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   Per-User NGINX │    │ ┌──────▼───────┐ │
 │ │ step-ca      │ │    │ │ Keycloak     │ │    │   (PUN spawning) │    │ │ oauth2-proxy │ │
-│ │ 0.29.0       │ │    │ │ 26.0.7       │ │    │                  │    │ │ → RStudio    │ │
+│ │ 0.30.2       │ │    │ │ 26.0.7       │ │    │                  │    │ │ → RStudio    │ │
 │ └──────┬───────┘ │    │ └──────┬───────┘ │    │   ┌──────────┐   │    │ └──────┬───────┘ │
 │        │         │    │        │         │    │   │ RStudio   │   │    │ ┌──────▼───────┐ │
 │ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   │ Containers│   │    │ │ SSSD/Samba   │ │
@@ -144,19 +144,19 @@ step-ca Root CA
 
 | Stack | Container | Image | Role | User | Ephemeral? |
 |-------|-----------|-------|------|------|------------|
-| PKI | `step-ca-init-files` | step-ca:0.29.0 | Dirs + secrets | root | Yes |
+| PKI | `step-ca-init-files` | step-ca:0.30.2 | Dirs + secrets | root | Yes |
 | PKI | `step-ca-db` | postgres:15-alpine | DB backend | PUID:PGID | No |
-| PKI | `step-ca` | step-ca:0.29.0 | Certificate Authority | PUID:PGID | No |
-| PKI | `step-ca-configurator` | step-cli:0.29.0 | Provisioner setup | PUID:PGID | Yes |
+| PKI | `step-ca` | step-ca:0.30.2 | Certificate Authority | PUID:PGID | No |
+| PKI | `step-ca-configurator` | step-cli:0.31.0 | Provisioner setup | PUID:PGID | Yes |
 | PKI | `step-ca-proxy` | caddy + caddy-l4 | L4 TCP proxy | PUID:PGID | No |
-| PKI | `fingerprint-writer` | step-cli:0.29.0 | Write root fingerprint | PUID:PGID | Yes |
+| PKI | `fingerprint-writer` | step-cli:0.31.0 | Write root fingerprint | PUID:PGID | Yes |
 | PKI | `pki-watchtower` | watchtower:1.7.1 | Auto-update | root | No |
 | IAM | `iam-init` | Dockerfile.init | Fetch certs + perms | root | Yes |
 | IAM | `iam-docker-proxy` | docker-socket-proxy | Safe docker.sock | root | No |
 | IAM | `iam-renewer` | Dockerfile.renewer | Cert lifecycle | root | No |
 | IAM | `iam-db` | postgres:15-alpine | KC database | PUID:PGID | No |
 | IAM | `iam-keycloak` | keycloak:26.0.7 | Identity Provider | PUID:PGID | No |
-| IAM | `iam-proxy` | caddy:2.9.1-alpine | L7 reverse proxy | PUID:PGID | No |
+| IAM | `iam-proxy` | caddy:2.11.4-alpine | L7 reverse proxy | PUID:PGID | No |
 | IAM | `iam-watchtower` | watchtower:1.7.1 | Auto-update | root | No |
 | OOD | `ood-init` | Dockerfile.init | Fetch PKI root | root | Yes |
 | OOD | `ood-portal` | Dockerfile.ood (Noble) | OnDemand portal | root | No |
@@ -359,7 +359,7 @@ These are non-negotiable constraints. Any code that violates them is **rejected*
 | Running `docker compose up` without prior `chown` | Root-owned dirs → containers can't write | Deploy script handles permissions first |
 | `curl -k` (skip TLS verify) in production scripts | Defeats the entire PKI purpose | Use `--fingerprint` or install root CA first |
 | Embedding `oidc_client_secret` in ConfigMaps (K8s) | Secrets in plaintext in etcd | Use K8s Secrets (or ExternalSecretsOperator) |
-| Using `step-ca:latest` | Version drift between configurator and CA | Pin to `0.29.0` everywhere |
+| Using `step-ca:latest` | Version drift between configurator and CA | Pin to one version everywhere (step-ca `0.30.2`, step-cli `0.31.0`) |
 | Mixing `POSTGRES_PASSWORD` and `PGPASSWORD` | Different vars for different contexts | `POSTGRES_PASSWORD` = init, `PGPASSWORD` = runtime DSN |
 
 ---
@@ -825,7 +825,7 @@ Use this XML-structured context when working with Claude API or Claude Projects:
   
   <components>
     <component name="infra-pki" role="Certificate Authority">
-      <tech>step-ca 0.29.0 + PostgreSQL 15 + Caddy L4</tech>
+      <tech>step-ca 0.30.2 + PostgreSQL 15 + Caddy L4</tech>
       <network>pki-net (isolated Docker bridge)</network>
       <ports>9000 (CA API via Caddy), 80 (public certs/fingerprint)</ports>
     </component>
@@ -866,8 +866,8 @@ Use this XML-structured context when working with Claude API or Claude Projects:
   </hard_constraints>
   
   <image_versions>
-    <image name="step-ca" version="0.29.0" />
-    <image name="step-cli" version="0.29.0" />
+    <image name="step-ca" version="0.30.2" />
+    <image name="step-cli" version="0.31.0" />
     <image name="postgres" version="15-alpine" />
     <image name="keycloak" version="26.0.7" registry="quay.io/keycloak" />
     <image name="caddy" version="2.9.1-alpine" />
@@ -1041,7 +1041,7 @@ When creating artifacts (React components, HTML, diagrams) for this project:
 
 Key facts Claude should retain across conversation turns:
 
-- **step-ca version: 0.29.0** (not 0.25.2 — that's the outdated K8s manifest)
+- **step-ca version: 0.30.2** (not 0.25.2 — that's the outdated K8s manifest)
 - **Keycloak version: 26.0.7** (not 23.0 — that's the outdated K8s manifest)
 - **OOD source: Ubuntu Noble 24.04 deb from apt.osc.edu** (NOT Docker Hub `osc/ondemand` — that image doesn't exist)
 - **Caddy L4 = TCP proxy for PKI (port 9000)** / **Caddy L7 = HTTP reverse proxy for IAM**

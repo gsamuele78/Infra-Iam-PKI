@@ -41,7 +41,7 @@ Gemini performs best with structured, clear outputs. For this project:
 
 **Stack:**
 
-- `infra-pki` → step-ca 0.29.0 + PostgreSQL 15 + Caddy L4 (TCP proxy)
+- `infra-pki` → step-ca 0.30.2 + PostgreSQL 15 + Caddy L4 (TCP proxy)
 - `infra-iam` → Keycloak 26.0.7 + PostgreSQL 15 + Caddy L7 (HTTPS reverse proxy)  
 - `infra-ood` → Open OnDemand 4.1 (Ubuntu 24.04 debs) + Apache mod_auth_openidc
 - `infra-rstudio` → RStudio Server + oauth2-proxy v7.6.0 + Nginx portal + SSSD/Samba AD auth (`network_mode: host` — only stack allowed to)
@@ -80,8 +80,8 @@ Before generating ANY code for this project, Gemini MUST verify against this che
 
 | Image | Version | Registry | Notes |
 |-------|---------|----------|-------|
-| `smallstep/step-ca` | `0.29.0` | Docker Hub | CA server |
-| `smallstep/step-cli` | `0.29.0` | Docker Hub | CLI for configurator/init/fingerprint |
+| `smallstep/step-ca` | `0.30.2` | Docker Hub | CA server |
+| `smallstep/step-cli` | `0.31.0` | Docker Hub | CLI for configurator/init/fingerprint |
 | `postgres` | `15-alpine` | Docker Hub | Both PKI and IAM databases |
 | `keycloak` | `26.0.7` | `quay.io/keycloak/keycloak` | Identity Provider |
 | `caddy` | `2.9.1-alpine` | Docker Hub | IAM L7 proxy (stock image) |
@@ -299,7 +299,7 @@ Is it a Dockerfile?
 ├── YES → No runtime package installs in entrypoint
 │         → Pin base image version
 │         → Prefer alpine variants
-│         → If init container: FROM step-cli:0.29.0
+│         → If init container: FROM step-cli:0.31.0
 │
 Is it a .env file?
 ├── YES → NEVER include real passwords
@@ -411,7 +411,7 @@ scripts/infra-iam/validate_iam_config.sh --pre-deploy
 
 | Question | Answer |
 |----------|--------|
-| What's the CA? | step-ca 0.29.0 |
+| What's the CA? | step-ca 0.30.2 |
 | What's the IdP? | Keycloak 26.0.7 |
 | What's the HPC portal? | Open OnDemand 4.1 (Ubuntu Noble debs) |
 | What DB? | PostgreSQL 15-alpine (separate instance per stack) |

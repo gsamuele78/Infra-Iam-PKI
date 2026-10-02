@@ -2,7 +2,7 @@ services:
   # 1. Pre-Start Init: Creates directories and secrets
   # Must run BEFORE step-ca starts.
   init-files:
-    image: smallstep/step-ca:0.29.0
+    image: smallstep/step-ca:0.30.2
     container_name: step-ca-init-files
     restart: "no" # one-shot: dependants wait on service_completed_successfully
     user: root
@@ -65,7 +65,7 @@ services:
 
   # 2. Main Service
   step-ca:
-    image: smallstep/step-ca:0.29.0
+    image: smallstep/step-ca:0.30.2
     container_name: step-ca
     hostname: step-ca
     user: "${PUID}:${PGID}"
@@ -125,7 +125,7 @@ services:
   # 3. Post-Start Config: Configures provisioners dynamically
   # Must run AFTER step-ca is healthy.
   configurator:
-    image: smallstep/step-cli:0.29.0
+    image: smallstep/step-cli:0.31.0
     container_name: step-ca-configurator
     user: "${PUID}:${PGID}"
     entrypoint: /bin/sh
@@ -193,7 +193,7 @@ services:
       retries: 3
 
   fingerprint-writer:
-    image: smallstep/step-cli:0.29.0
+    image: smallstep/step-cli:0.31.0
     restart: "no" # one-shot: writes the fingerprint and exits
     # Runs as PUID:PGID (non-root). The `init-files` one-shot container pre-creates
     # fingerprint/ with the correct ownership before this service starts, so no root needed.

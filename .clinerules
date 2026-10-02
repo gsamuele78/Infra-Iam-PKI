@@ -28,7 +28,7 @@ This document is the **single source of truth** for any AI agent working on this
 
 A production-grade **Infrastructure-as-Code (IaC)** system providing:
 
-- **Infra-PKI:** Internal Certificate Authority (Smallstep `step-ca` 0.29.0) backed by PostgreSQL 15, fronted by Caddy L4 proxy with IP allowlisting.
+- **Infra-PKI:** Internal Certificate Authority (Smallstep `step-ca` 0.30.2) backed by PostgreSQL 15, fronted by Caddy L4 proxy with IP allowlisting.
 - **Infra-IAM:** Single Sign-On (Keycloak 26.0.7) with Active Directory LDAPS federation, secured by internal PKI certificates.
 - **Infra-OOD:** Open OnDemand portal (Ubuntu Noble 24.04 deb packages from `apt.osc.edu`) for HPC interactive sessions (RStudio, etc.), authenticated via OIDC against Keycloak.
 - **Infra-RStudio:** Containerized RStudio Server with zero-trust `oauth2-proxy` sidecars, Nginx portal, and SSSD/Samba auth backends for AD domain integration. Uses `network_mode: host` for unix domain socket passthrough.
@@ -65,7 +65,7 @@ The BIOME research group (Biodiversity & MacroEcology) at the Department of Biol
 │        │         │    │        │         │    │        │         │    │        │         │
 │ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   Per-User NGINX │    │ ┌──────▼───────┐ │
 │ │ step-ca      │ │    │ │ Keycloak     │ │    │   (PUN spawning) │    │ │ oauth2-proxy │ │
-│ │ 0.29.0       │ │    │ │ 26.0.7       │ │    │                  │    │ │ → RStudio    │ │
+│ │ 0.30.2       │ │    │ │ 26.0.7       │ │    │                  │    │ │ → RStudio    │ │
 │ └──────┬───────┘ │    │ └──────┬───────┘ │    │   ┌──────────┐   │    │ └──────┬───────┘ │
 │        │         │    │        │         │    │   │ RStudio   │   │    │ ┌──────▼───────┐ │
 │ ┌──────▼───────┐ │    │ ┌──────▼───────┐ │    │   │ Containers│   │    │ │ SSSD/Samba   │ │
@@ -90,19 +90,19 @@ step-ca Root CA
 
 | Stack | Container | Image | Role | User | Ephemeral? |
 |-------|-----------|-------|------|------|------------|
-| PKI | `step-ca-init-files` | step-ca:0.29.0 | Dirs + secrets | root | Yes |
+| PKI | `step-ca-init-files` | step-ca:0.30.2 | Dirs + secrets | root | Yes |
 | PKI | `step-ca-db` | postgres:15-alpine | DB backend | PUID:PGID | No |
-| PKI | `step-ca` | step-ca:0.29.0 | Certificate Authority | PUID:PGID | No |
-| PKI | `step-ca-configurator` | step-cli:0.29.0 | Provisioner setup | PUID:PGID | Yes |
+| PKI | `step-ca` | step-ca:0.30.2 | Certificate Authority | PUID:PGID | No |
+| PKI | `step-ca-configurator` | step-cli:0.31.0 | Provisioner setup | PUID:PGID | Yes |
 | PKI | `step-ca-proxy` | caddy + caddy-l4 | L4 TCP proxy | PUID:PGID | No |
-| PKI | `fingerprint-writer` | step-cli:0.29.0 | Write root fingerprint | PUID:PGID | Yes |
+| PKI | `fingerprint-writer` | step-cli:0.31.0 | Write root fingerprint | PUID:PGID | Yes |
 | PKI | `pki-watchtower` | watchtower:1.7.1 | Auto-update | root | No |
 | IAM | `iam-init` | Dockerfile.init | Fetch certs + perms | root | Yes |
 | IAM | `iam-docker-proxy` | docker-socket-proxy | Safe docker.sock | root | No |
 | IAM | `iam-renewer` | Dockerfile.renewer | Cert lifecycle | root | No |
 | IAM | `iam-db` | postgres:15-alpine | KC database | PUID:PGID | No |
 | IAM | `iam-keycloak` | keycloak:26.0.7 | Identity Provider | PUID:PGID | No |
-| IAM | `iam-proxy` | caddy:2.9.1-alpine | L7 reverse proxy | PUID:PGID | No |
+| IAM | `iam-proxy` | caddy:2.11.4-alpine | L7 reverse proxy | PUID:PGID | No |
 | IAM | `iam-watchtower` | watchtower:1.7.1 | Auto-update | root | No |
 | OOD | `ood-init` | Dockerfile.init | Fetch PKI root | root | Yes |
 | OOD | `ood-portal` | Dockerfile.ood (Noble) | OnDemand portal | root | No |
@@ -305,7 +305,7 @@ These are non-negotiable constraints. Any code that violates them is **rejected*
 | Running `docker compose up` without prior `chown` | Root-owned dirs → containers can't write | Deploy script handles permissions first |
 | `curl -k` (skip TLS verify) in production scripts | Defeats the entire PKI purpose | Use `--fingerprint` or install root CA first |
 | Embedding `oidc_client_secret` in ConfigMaps (K8s) | Secrets in plaintext in etcd | Use K8s Secrets (or ExternalSecretsOperator) |
-| Using `step-ca:latest` | Version drift between configurator and CA | Pin to `0.29.0` everywhere |
+| Using `step-ca:latest` | Version drift between configurator and CA | Pin to one version everywhere (step-ca `0.30.2`, step-cli `0.31.0`) |
 | Mixing `POSTGRES_PASSWORD` and `PGPASSWORD` | Different vars for different contexts | `POSTGRES_PASSWORD` = init, `PGPASSWORD` = runtime DSN |
 
 ---

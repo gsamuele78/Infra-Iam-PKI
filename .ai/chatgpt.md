@@ -25,7 +25,7 @@ ChatGPT supports several context injection methods. Choose the one that fits you
 
 **Three isolated Docker hosts:**
 
-- `infra-pki` → step-ca 0.29.0 + PostgreSQL 15 + Caddy L4 proxy (TCP, port 9000)
+- `infra-pki` → step-ca 0.30.2 + PostgreSQL 15 + Caddy L4 proxy (TCP, port 9000)
 - `infra-iam` → Keycloak 26.0.7 + PostgreSQL 15 + Caddy L7 reverse proxy (HTTPS)
 - `infra-ood` → Open OnDemand 4.1 (Ubuntu 24.04 debs from apt.osc.edu) + Apache mod_auth_openidc
 - `infra-rstudio` → RStudio Server + oauth2-proxy v7.6.0 + Nginx portal + SSSD/Samba AD auth (uses `network_mode: host` — only stack allowed to)
@@ -64,7 +64,7 @@ COMPOSE FORMAT:
 - Always include: deploy, healthcheck, logging, labels, depends_on
 
 PINNED VERSIONS (do not change):
-- step-ca: 0.29.0 | step-cli: 0.29.0 | postgres: 15-alpine
+- step-ca: 0.30.2 | step-cli: 0.31.0 | postgres: 15-alpine
 - keycloak: 26.0.7 (quay.io) | caddy: 2.9.1-alpine
 - watchtower: 1.7.1 (containrrr) | docker-socket-proxy: 0.3.0 (tecnativa)
 - oauth2-proxy: v7.6.0 (quay.io/oauth2-proxy)
@@ -335,8 +335,8 @@ ChatGPT frequently drifts on version numbers across long conversations. Re-check
 
 | Component | Correct Version | Common GPT Mistake |
 |-----------|----------------|-------------------|
-| step-ca | `0.29.0` | Uses `latest` or `0.25.2` (old K8s manifest version) |
-| step-cli | `0.29.0` | Uses `latest` or mismatches with step-ca |
+| step-ca | `0.30.2` | Uses `latest` or `0.25.2` (old K8s manifest version) |
+| step-cli | `0.31.0` | Uses `latest` or mismatches with step-ca |
 | Keycloak | `26.0.7` | Uses `latest`, `23.0` (old K8s), or `24.x` |
 | PostgreSQL | `15-alpine` | Uses `16-alpine` or `latest` |
 | Caddy | `2.9.1-alpine` (IAM) | Uses `latest` or generic `caddy:2` |
@@ -365,7 +365,7 @@ ChatGPT's instruction-following degrades over long conversations. If you notice 
 
 ChatGPT doesn't have persistent memory across conversations (unless using the Memory feature). Paste these facts when starting a new conversation:
 
-- step-ca version is 0.29.0 (not 0.25.2)
+- step-ca version is 0.30.2 (not 0.25.2)
 - Keycloak version is 26.0.7 (not 23.0)
 - OOD is built from Dockerfile.ood with Ubuntu Noble debs — there is NO Docker Hub image
 - Caddy PKI is a CUSTOM BUILD with caddy-l4 plugin — not stock Caddy

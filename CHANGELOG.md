@@ -27,6 +27,25 @@ the 3.x → 4.x releases is
   once this is on the default branch. Before that, run
   `claude plugin marketplace add ./ --scope local` from the repo root.
 
+### Changed (dependencies)
+
+- step-ca `0.29.0` → `0.30.2` and step-cli `0.29.0` → `0.31.0` everywhere: compose, the
+  init/renewer Dockerfiles, the operator scripts that run step-cli in a container, K8s
+  and the agent context. Checked against the upstream changelogs: the CLI only prints
+  less on `needs-renewal` (exit codes unchanged); step-ca's image now uses a JSON `CMD`,
+  which our compose entrypoint override does not use. RStudio's copies follow through
+  R-studioConf.
+- Caddy (IAM) `2.9.1` → `2.11.4`, now the same version as the PKI Caddy build.
+- docker-socket-proxy `0.3.0` → `v0.5.0` (HAProxy update).
+- Dependabot ignores Ubuntu minor/major bumps for `infra-ood`: OOD 4.1 packages exist
+  for noble only. Replaces Dependabot PRs #2 (minus `ubuntu:26.04`) and #3.
+
+#### Upgrade
+
+- `docker compose pull && docker compose up -d` on each host; on IAM and OOD rebuild the
+  init/renewer images (`docker compose build`). The step-ca 0.30 changelog lists no
+  database migration; back up the CA database first anyway (`backup_pki.sh`).
+
 ### Fixed
 
 - RStudio images build again (TD-13): synced R-studioConf `47441c5`, which drops

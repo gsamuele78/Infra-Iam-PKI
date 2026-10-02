@@ -97,7 +97,7 @@ services:
           cpus: '1.0'
 
   iam-proxy:
-    image: caddy:2.9.1-alpine
+    image: caddy:2.11.4-alpine
     container_name: iam-proxy
     restart: unless-stopped
     networks: [ iam-net ]
