@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(*.env)",
+      "Read(!.env.example)",
+      "Read(!.env.sandbox)",
+      "Read(!.env.sandbox.example)",
+      "Read(!*.env.template)",
+      "Read(secrets/**)",
+      "Read(*.key)",
+      "Read(*.crt)",
+      "Read(*.pem)",
+      "Read(*.p12)",
+      "Read(private_key)",
+      "Read(./infra-rstudio/config/oauth2-proxy.cfg)",
+      "Read(./infra-rstudio/config/admin_recipients.txt)",
+      "Read(./infra-rstudio/config/user_email_map.txt)",
+      "Read(./infra-rstudio/config/scopri_progetti_known.conf)",
+      "Read(./infra-rstudio/config/*.vars.conf)",
+      "Read(./infra-rstudio/config/site/**)",
+      "Read(step_data/**)",
+      "Read(db_data/**)",
+      "Read(keycloak_data/**)",
+      "Read(caddy_data/**)",
+      "Read(certs/**)",
+      "Read(backups/**)",
+      "Read(.vagrant/**)",
+      "Edit(./infra-rstudio/**)",
+      "Edit(./kubernetes-deploy/rstudio/**)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "serena"
+  ],
+  "enabledPlugins": {
+    "infra-iam-pki-lsp@infra-iam-pki": true
+  },
+  "extraKnownMarketplaces": {
+    "infra-iam-pki": {
+      "source": {
+        "source": "github",
+        "repo": "gsamuele78/Infra-Iam-PKI"
+      }
+    }
+  }
+}
