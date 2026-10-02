@@ -1,6 +1,6 @@
 # Alignment plan: Infra-IAM-PKI → reference repo standard
 
-Status: Accepted, in progress
+Status: Accepted, in progress. **Next steps and recovery items: [CONTINUATION-PLAN.md](CONTINUATION-PLAN.md).**
 Date: 2026-10-01
 Reference repo: [gsamuele78/Proxmox_biome_log_collector](https://github.com/gsamuele78/Proxmox_biome_log_collector) at `v0.3.1` (`4cd92b4`)
 This repo at analysis time: `main` @ `af8f87e`, 130 commits, **no tags**
@@ -168,27 +168,27 @@ git push origin main vX.Y.Z               # only when the maintainer says so
 Goal: no secret or private key reachable in the repo or its history,
 dead files gone, a first tag to measure from.
 
-- [ ] Inventory every secret ever committed:
+- [x] Inventory every secret ever committed:
       `gitleaks detect --source . --log-opts="--all" --report-path /tmp/gl.json`
       plus `git log --all -p -- '*.env' '*.env copy'`.
 - [ ] Rotate every leaked value on the real hosts: `CA_PASSWORD` (step-ca
       key re-encryption with `step crypto change-pass`), `POSTGRES_PASSWORD`,
       `SSH_HOST_PROVISIONER_PASSWORD`, `DB_PASSWORD`, `KC_ADMIN_PASSWORD`,
       OIDC client secrets. Record each one in a private runbook, not here.
-- [ ] Untrack `sandbox/.vagrant/`, `infra-*/.env copy`, `.serena/`.
+- [x] Untrack `sandbox/.vagrant/`, `infra-*/.env copy`, `.serena/`.
       Extend `.gitignore`: `.vagrant/`, `*.env copy`, `.env.*` (keep
       `!.env.example`, `!.env.sandbox`), `sandbox/logs/`,
       `tests/lab/artifacts/`, `__pycache__/`, `.serena/`, `.omo/`.
-- [ ] Delete the D14 dead files. Check D15 duplicates with `diff`, keep
+- [x] Delete the D14 dead files. Check D15 duplicates with `diff`, keep
       the copy compose/Dockerfiles actually use, and delete the other.
-- [ ] Purge history (Q1):
+- [x] Purge history (Q1):
       `git filter-repo --invert-paths --path-glob '*/.env' --path-glob '*/.env copy' --path sandbox/.vagrant`.
       Force-push both remotes; every clone must re-clone (announce it).
-- [ ] Add `LICENSE` (Q5) and `.editorconfig` (copy the reference's).
-- [ ] Create `CHANGELOG.md` with `## [Unreleased]` and
+- [x] Add `LICENSE` (Q5) and `.editorconfig` (copy the reference's).
+- [x] Create `CHANGELOG.md` with `## [Unreleased]` and
       `## [3.1.0] - <date>`, “Baseline before alignment; see
       doc/plan/ALIGNMENT-PLAN.md”.
-- [ ] Set `project.version: "3.1.0"` in `.ai/project.yml`, run
+- [x] Set `project.version: "3.1.0"` in `.ai/project.yml`, run
       `.ai/generate.sh`, and drop the hard-coded version line from the README.
 
 Verification gate:
