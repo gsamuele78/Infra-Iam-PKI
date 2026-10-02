@@ -63,6 +63,12 @@ WHEN GENERATING CODE:
 
 ---
 
+## Ongoing work
+
+Start from `doc/plan/CONTINUATION-PLAN.md`: current state, recovery items and the
+ordered work queue, with the working rules for both repos (PR flow, vendored RStudio,
+monster build dispatch, `gh` REST fallback).
+
 ## 0. How to Use This File
 
 This document is the **single source of truth** for any AI agent working on this codebase. Before writing or modifying ANY file, you MUST:

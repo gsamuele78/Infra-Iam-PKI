@@ -6,6 +6,12 @@ Instructions for coding agents working in this repo. The full context
 [.ai/agents.md](.ai/agents.md); humans start at [README.md](README.md) and
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Ongoing work
+
+Start from [doc/plan/CONTINUATION-PLAN.md](doc/plan/CONTINUATION-PLAN.md): current
+state, recovery items and the ordered work queue (with the working rules for both
+repos). The rationale behind each step is in `doc/plan/ALIGNMENT-PLAN.md`.
+
 ## What this repo is
 
 Infrastructure as code for an internal PKI (step-ca), SSO (Keycloak with AD
